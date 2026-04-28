@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Django
+*.log
+staticfiles/
+mediafiles/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
