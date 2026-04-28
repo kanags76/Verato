@@ -6,14 +6,80 @@
 
 ---
 
+## ENVIRONMENT STATUS — What's Actually Installed
+
+| Component | Version | Status |
+|---|---|---|
+| PostgreSQL | 18.3 (Homebrew) | Running, auto-starts on login |
+| pgvector | 0.8.2 | Installed + enabled in commitment_os |
+| Redis | 7.x (Homebrew) | Running, auto-starts on login |
+| Python venv | 3.x | At `backend/.venv` |
+| Django | 6.0.4 | Installed |
+| Django REST Framework | 3.17.1 | Installed |
+| Celery | 5.6.3 | Installed |
+| drf-spectacular | 0.29.0 | Installed (Swagger UI) |
+| psycopg2-binary | 2.9.12 | Installed |
+| python-decouple | 3.8 | Installed |
+| django-celery-results | 2.6.0 | Installed |
+
+**Project path:** `~/Documents/Programs/Verato/backend`
+**GitHub repo:** https://github.com/kanags76/Verato (private)
+**Database:** `commitment_os` on localhost:5432 (no password — Homebrew auth)
+
+---
+
+## START OF SESSION — Run these before every coding session
+
+```bash
+# 1. Check services are up (they auto-start, but verify)
+brew services list | grep -E "postgresql|redis"
+pg_isready            # Should show: localhost:5432 - accepting connections
+redis-cli ping        # Should return: PONG
+
+# 2. If either service is stopped, restart it
+brew services start postgresql@18
+brew services start redis
+
+# 3. Activate your Python venv
+cd ~/Documents/Programs/Verato/backend
+source .venv/bin/activate
+
+# 4. Set Django settings
+export DJANGO_SETTINGS_MODULE=config.settings.local
+
+# 5. Start Django dev server
+python manage.py runserver
+# → http://localhost:8000
+# → Swagger UI: http://localhost:8000/api/schema/ui/
+```
+
+> PostgreSQL and Redis auto-start on Mac login via Homebrew.
+> You usually only need steps 3–5 at the start of each session.
+
+---
+
+## STOP SESSION — Shut everything down cleanly
+
+```bash
+# Stop Django (Ctrl+C in the terminal running it)
+
+# Stop Celery (Ctrl+C in the terminal running it)
+
+# Stop services (optional — they're lightweight, leaving them running is fine)
+brew services stop postgresql@18
+brew services stop redis
+```
+
+---
+
 ## Your development sequence (confirmed)
 
 ```
 PHASE 1 — Local backend development (Weeks 1–12)
   Mac M-series
-  ├── PostgreSQL 16     (Homebrew — native ARM64)
-  ├── Redis 7           (Homebrew — native ARM64)
-  ├── Django 5.x        (Python venv — runs directly)
+  ├── PostgreSQL 18     (Homebrew — native ARM64) ✓ DONE
+  ├── Redis 7           (Homebrew — native ARM64) ✓ DONE
+  ├── Django 6.x        (Python venv — runs directly) ✓ DONE
   ├── Celery worker     (Python venv — runs directly)
   └── Swagger UI        (auto-generated — your "dummy screen" for API testing)
 
@@ -34,215 +100,139 @@ Swagger UI is your interactive API tester for every endpoint.
 
 ---
 
-## Option A — Homebrew (recommended for Apple Silicon)
+## What was set up (completed steps)
 
-No Docker. Postgres and Redis run as native Mac services.
-Faster startup, lower memory, no Docker Desktop overhead.
-
-### Install Homebrew (if not already installed)
+### PostgreSQL 18
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Apple Silicon — add to PATH (add to ~/.zshrc)
-echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+brew install postgresql@18
+echo 'export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
-
-# Verify
-brew --version
-```
-
-### Install PostgreSQL 16 with pgvector
-
-```bash
-# Install Postgres 16
-brew install postgresql@16
-
-# Add to PATH (Apple Silicon path)
-echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# Start Postgres as a background service (auto-starts on login)
-brew services start postgresql@16
-
-# Verify it's running
-brew services list | grep postgresql
-pg_isready   # Should show: localhost:5432 - accepting connections
-
-# Create the database
+brew services start postgresql@18
 createdb commitment_os
-
-# Verify
-psql commitment_os -c "SELECT version();"
-
-# Install pgvector extension
-brew install pgvector
-
-# Enable pgvector in the database (run once)
-psql commitment_os -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql commitment_os -c "SELECT extname FROM pg_extension WHERE extname = 'vector';"
-# Should return: vector
 ```
 
-### Install Redis
+### pgvector
+
+```bash
+brew install pgvector
+psql commitment_os -c "CREATE EXTENSION IF NOT EXISTS vector;"
+# Verified: returns 'vector'
+```
+
+### Redis
 
 ```bash
 brew install redis
-
-# Start Redis as a background service
 brew services start redis
-
-# Verify
-brew services list | grep redis
-redis-cli ping   # Should return: PONG
+redis-cli ping   # PONG ✓
 ```
 
-### Service management commands
+### Python venv + dependencies
 
 ```bash
-# Start all services
-brew services start postgresql@16
-brew services start redis
-
-# Stop all services
-brew services stop postgresql@16
-brew services stop redis
-
-# Restart
-brew services restart postgresql@16
-brew services restart redis
-
-# Check status
-brew services list
-
-# View Postgres logs if something goes wrong
-tail -f /opt/homebrew/var/log/postgresql@16.log
+cd ~/Documents/Programs/Verato/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install django djangorestframework psycopg2-binary celery redis \
+    python-decouple drf-spectacular django-celery-results
+pip freeze > requirements.txt
 ```
 
-### Update .env for Homebrew (no password needed locally)
+### .env (Homebrew — no password needed)
 
-```bash
-# Homebrew Postgres uses your Mac username, no password
-# Update backend/.env:
-
+```
 DB_NAME=commitment_os
-DB_USER=     # Leave blank — uses your Mac username automatically
-DB_PASSWORD= # Leave blank — no password in local Homebrew Postgres
+DB_USER=             # blank = uses your Mac username (kanags)
+DB_PASSWORD=         # blank = no password for local Homebrew Postgres
 DB_HOST=localhost
 DB_PORT=5432
 
 REDIS_URL=redis://localhost:6379/0
 ```
 
-Update `config/settings/base.py` to handle blank password:
+### config/settings/base.py
 
 ```python
+from decouple import config
+
 DATABASES = {
     'default': {
         'ENGINE':   'django.db.backends.postgresql',
         'NAME':     config('DB_NAME',     default='commitment_os'),
-        'USER':     config('DB_USER',     default=''),  # blank = Mac username
-        'PASSWORD': config('DB_PASSWORD', default=''),  # blank = no password
+        'USER':     config('DB_USER',     default=''),
+        'PASSWORD': config('DB_PASSWORD', default=''),
         'HOST':     config('DB_HOST',     default='localhost'),
         'PORT':     config('DB_PORT',     default='5432'),
     }
 }
+
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+```
+
+### GitHub
+
+```bash
+gh repo create kanags76/Verato --private --source . --remote origin --push
+# Repo: https://github.com/kanags76/Verato
 ```
 
 ---
 
-## Option B — Docker Desktop (if you prefer containers)
-
-Use this if you want your local environment to mirror production exactly,
-or if you already have Docker Desktop installed and are comfortable with it.
-
-### Install Docker Desktop for Apple Silicon
+## Service management commands
 
 ```bash
-# Download from https://www.docker.com/products/docker-desktop/
-# Choose: Mac with Apple Chip
-# Install, open Docker Desktop, wait for it to start
+# Start all services
+brew services start postgresql@18
+brew services start redis
 
-# Verify
-docker --version
-docker-compose --version
-```
+# Stop all services
+brew services stop postgresql@18
+brew services stop redis
 
-### docker-compose.yml (Postgres + Redis only)
+# Restart
+brew services restart postgresql@18
+brew services restart redis
 
-```yaml
-# backend/docker-compose.yml
-# Only runs the infrastructure services.
-# Django and Celery still run natively in your terminal.
+# Check status
+brew services list
 
-version: '3.9'
-
-services:
-  db:
-    image: pgvector/pgvector:pg16
-    # This image has native ARM64 support — works on Apple Silicon
-    platform: linux/arm64
-    container_name: commitment_os_db
-    environment:
-      POSTGRES_DB: commitment_os
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    platform: linux/arm64
-    container_name: commitment_os_redis
-    ports:
-      - "6379:6379"
-
-volumes:
-  postgres_data:
-    name: commitment_os_postgres_data
-```
-
-```bash
-# Start services
-docker-compose up db redis -d
-
-# Enable pgvector (run once after first start)
-docker-compose exec db psql -U postgres -d commitment_os \
-  -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# Stop services
-docker-compose down
-
-# Stop and delete all data (nuclear reset)
-docker-compose down -v
+# View Postgres logs if something goes wrong
+tail -f /opt/homebrew/var/log/postgresql@18.log
 ```
 
 ---
 
-## Recommendation for you (Apple Silicon, solo founder)
+## Complete local dev terminal layout
 
-**Use Homebrew (Option A).** Here's why:
+Four terminal tabs in VS Code:
 
-| Factor | Homebrew | Docker |
-|---|---|---|
-| Memory overhead | ~50MB | ~3-4GB for Docker Desktop |
-| Startup time | Already running (auto-start) | 30-60 seconds |
-| Apple Silicon support | Native ARM64 binary | Emulation layer for some images |
-| Complexity | Two brew commands | docker-compose + daemon running |
-| Mirrors production | No (but doesn't need to) | Closer to prod |
-| pgvector support | Yes (brew install pgvector) | Yes |
+```
+Tab 1 — Django API
+  cd ~/Documents/Programs/Verato/backend
+  source .venv/bin/activate
+  export DJANGO_SETTINGS_MODULE=config.settings.local
+  python manage.py runserver
+  → http://localhost:8000
 
-The "mirrors production" argument for Docker only matters when you have a team
-where environment differences cause bugs. Solo founder on Mac → just use Homebrew.
-When you Dockerise for AWS ECS deployment, that's a separate Dockerfile for production.
-Your local env doesn't need to match it.
+Tab 2 — Celery worker (only open when testing async tasks)
+  cd ~/Documents/Programs/Verato/backend
+  source .venv/bin/activate
+  export DJANGO_SETTINGS_MODULE=config.settings.local
+  celery -A config worker --loglevel=info
+
+Tab 3 — Tests (run as needed)
+  cd ~/Documents/Programs/Verato/backend
+  source .venv/bin/activate
+  pytest -v
+
+Tab 4 — Free for git, migrations, shell commands
+  cd ~/Documents/Programs/Verato/backend
+  source .venv/bin/activate
+```
+
+No Next.js tab needed until Phase 3.
+Homebrew services (Postgres + Redis) start automatically on login — no terminal needed.
 
 ---
 
@@ -260,12 +250,10 @@ Auto-generated by drf-spectacular. Zero setup. Available at:
 - Shows request/response schemas
 - Execute any request directly in the browser
 - Handles JWT auth (click Authorize → paste your token)
-- This is your main tool for all backend development
 
 ### 2. REST Client in VS Code (secondary — for saved test scenarios)
 
 Create `backend/api-tests/` folder with `.http` files.
-VS Code REST Client extension runs them inline.
 
 ```
 # backend/api-tests/auth.http
@@ -279,82 +267,28 @@ Content-Type: application/json
   "password": "yourpassword"
 }
 
-### -----------------------------------------------
-
-### Get dashboard (paste token from above response)
+### Get dashboard
 GET http://localhost:8000/api/v1/dashboard/
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhb...
-```
-
-```
-# backend/api-tests/commitments.http
-
-@token = eyJ0eXAiOiJKV1QiLCJhb...  # set this once
-
-### List all commitments
-GET http://localhost:8000/api/v1/commitments/
-Authorization: Bearer {{token}}
-
-### List at-risk only
-GET http://localhost:8000/api/v1/commitments/?status=at_risk
-Authorization: Bearer {{token}}
-
-### Upload a transcript
-POST http://localhost:8000/api/v1/meetings/upload/
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{
-  "title": "Q2 Planning",
-  "transcript_text": "Sarah: I'll have the pricing deck ready by Thursday. Tom: I'll send the hiring brief to HR by end of week.",
-  "occurred_at": "2026-04-22T14:00:00Z"
-}
-
-### Confirm a commitment
-POST http://localhost:8000/api/v1/commitments/COMMITMENT-UUID-HERE/confirm/
-Authorization: Bearer {{token}}
 ```
 
 ### 3. Django Admin (for data inspection)
 
 `http://localhost:8000/admin/`
 
-- Browse all database records directly
-- Useful for verifying extraction results
-- No code needed — register models in `admin.py` per app
-
 ---
 
-## Complete local dev terminal layout
+## Reset local DB (if something goes wrong)
 
-Four terminal tabs in VS Code (`Ctrl+Shift+\`` `):
-
+```bash
+dropdb commitment_os
+createdb commitment_os
+psql commitment_os -c "CREATE EXTENSION IF NOT EXISTS vector;"
+cd ~/Documents/Programs/Verato/backend
+source .venv/bin/activate
+python manage.py migrate
+python manage.py createsuperuser
 ```
-Tab 1 — Django API
-  cd ~/projects/commitment-os/backend
-  source .venv/bin/activate
-  export DJANGO_SETTINGS_MODULE=config.settings.local
-  python manage.py runserver
-  → http://localhost:8000
-
-Tab 2 — Celery worker (only open when testing async tasks)
-  cd ~/projects/commitment-os/backend
-  source .venv/bin/activate
-  export DJANGO_SETTINGS_MODULE=config.settings.local
-  celery -A config worker --loglevel=info
-
-Tab 3 — Tests (run as needed)
-  cd ~/projects/commitment-os/backend
-  source .venv/bin/activate
-  pytest -v
-
-Tab 4 — Free for git, migrations, shell commands
-  cd ~/projects/commitment-os/backend
-  source .venv/bin/activate
-```
-
-No Next.js tab needed until Phase 3.
-Homebrew services (Postgres + Redis) start automatically on login — no terminal needed.
 
 ---
 
@@ -362,7 +296,6 @@ Homebrew services (Postgres + Redis) start automatically on login — no termina
 
 When your local backend is complete and tested (end of Week 12),
 you create a Dockerfile for production deployment only.
-This is separate from your local setup.
 
 ```dockerfile
 # backend/Dockerfile  (created at Week 12, not before)
@@ -373,8 +306,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y libpq-dev gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements/production.txt requirements/production.txt
-RUN pip install --no-cache-dir -r requirements/production.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
@@ -387,9 +320,6 @@ CMD ["gunicorn", "config.wsgi:application", \
 EXPOSE 8000
 ```
 
-You only write this when you're ready to push to AWS.
-Until then, run Django directly with `python manage.py runserver`.
-
 ---
 
 ## Phase 3 — Frontend on Google AI Studio
@@ -401,48 +331,6 @@ When the backend APIs are deployed and working on AWS ECS:
 3. Point `NEXT_PUBLIC_API_URL` at your AWS ALB domain
 4. Test locally against the real AWS API
 5. Deploy to GCP Cloud Run
-
-You never need to run the frontend locally against a local backend.
-By Phase 3, the AWS backend is the source of truth.
-
----
-
-## Quick reference — all startup commands
-
-```bash
-# Check services are running (Homebrew)
-brew services list
-pg_isready        # Postgres
-redis-cli ping    # Redis → PONG
-
-# Start if not running
-brew services start postgresql@16
-brew services start redis
-
-# Django
-cd ~/projects/commitment-os/backend
-source .venv/bin/activate
-python manage.py runserver
-
-# Celery (separate tab, only when needed)
-celery -A config worker --loglevel=info
-
-# Test Gemini
-bash scripts/test_gemini.sh
-
-# Run all tests
-pytest
-
-# Django admin shell
-python manage.py shell
-
-# Reset local DB (if something goes wrong)
-dropdb commitment_os
-createdb commitment_os
-psql commitment_os -c "CREATE EXTENSION IF NOT EXISTS vector;"
-python manage.py migrate
-python manage.py createsuperuser
-```
 
 ---
 
