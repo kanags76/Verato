@@ -1,0 +1,24 @@
+import os
+from celery import Celery
+from celery.schedules import crontab
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.local')
+
+app = Celery('commitment_os')
+app.config_from_object('django.conf:settings', namespace='CELERY')
+app.autodiscover_tasks()
+
+app.conf.beat_schedule = {
+    'recompute-risk-scores': {
+        'task':     'apps.commitments.tasks.recompute_risk_scores',
+        'schedule': crontab(minute=0, hour='*/6'),
+    },
+    'send-deadline-nudges': {
+        'task':     'apps.notifications.tasks.send_deadline_nudges',
+        'schedule': crontab(minute=0, hour=9),
+    },
+    'send-weekly-digest': {
+        'task':     'apps.notifications.tasks.send_weekly_digest',
+        'schedule': crontab(minute=0, hour=7, day_of_week='monday'),
+    },
+}
