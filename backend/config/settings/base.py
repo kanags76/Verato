@@ -114,10 +114,12 @@ REST_FRAMEWORK = {
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = ['authorization', 'content-type', 'accept', 'x-requested-with']
 
-GEMINI_API_KEY          = config('GEMINI_API_KEY',          default='')
-GEMINI_EXTRACTION_MODEL = config('GEMINI_EXTRACTION_MODEL', default='gemini-1.5-pro')
-GEMINI_CLASSIFY_MODEL   = config('GEMINI_CLASSIFY_MODEL',   default='gemini-1.5-flash')
-GEMINI_EMBEDDING_MODEL  = config('GEMINI_EMBEDDING_MODEL',  default='models/text-embedding-004')
+# Vertex AI — auth via ADC (gcloud auth application-default login), no API key
+GOOGLE_CLOUD_PROJECT    = config('GOOGLE_CLOUD_PROJECT',    default='verato')
+GOOGLE_CLOUD_LOCATION   = config('GOOGLE_CLOUD_LOCATION',   default='us-central1')
+GEMINI_EXTRACTION_MODEL = config('GEMINI_EXTRACTION_MODEL', default='gemini-2.5-flash-lite')
+GEMINI_CLASSIFY_MODEL   = config('GEMINI_CLASSIFY_MODEL',   default='gemini-2.5-flash-lite')
+GEMINI_EMBEDDING_MODEL  = config('GEMINI_EMBEDDING_MODEL',  default='text-embedding-004')
 
 STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
