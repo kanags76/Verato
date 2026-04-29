@@ -67,13 +67,13 @@ brew services stop redis
 | 1.5 | Prerequisites (PG18, Redis, Python venv) | ✓ DONE — Homebrew, no Docker |
 | 1.6 | VS Code setup | ⏳ TODO |
 | 1.7 | Docker Compose | N/A — using Homebrew instead |
-| 1.8 | Django project scaffold | ⏳ NEXT — django-admin startproject + apps |
-| 1.9 | Environment variables (.env) | ✓ DONE — base .env created |
-| 1.10 | Django settings (base/local/production) | ⏳ NEXT — needs full settings files |
-| 1.11 | URLs, Swagger, Celery config | ⏳ TODO |
-| 1.12 | DRF Spectacular config | ⏳ TODO |
-| 1.14 | First migration + superuser | ⏳ NEXT — after scaffold |
-| 1.15 | Gemini API verification | ⏳ TODO — need GEMINI_API_KEY |
+| 1.8 | Django project scaffold | ✓ DONE — manage.py, 5 apps, extraction module |
+| 1.9 | Environment variables (.env) | ✓ DONE — all fields populated |
+| 1.10 | Django settings (base/local/production) | ✓ DONE |
+| 1.11 | URLs, Swagger, Celery config | ✓ DONE — verified working |
+| 1.12 | DRF Spectacular config | ✓ DONE — Swagger UI live at /api/schema/ui/ |
+| 1.14 | First migration + superuser | ✓ DONE — admin/admin1234 |
+| 1.15 | Gemini API verification | ⏳ TODO — add GEMINI_API_KEY to .env |
 | 1.16 | GitHub Actions CI | ⏳ TODO |
 
 ---
