@@ -129,11 +129,11 @@ USE_I18N      = True
 USE_TZ        = True
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Commitment OS API',
+    'TITLE': 'Verato API',
     'DESCRIPTION': '''
-## Commitment OS — Backend API
+## Verato — Backend API
 
-Extracts every commitment made in meetings, tracks it, detects conflicts, surfaces risk.
+Extracts every commitment made in meetings, assigns ownership, scores risk, and nudges before it slips.
 
 ### Authentication
 All endpoints (except /api/v1/auth/token/) require a JWT Bearer token.
@@ -151,11 +151,9 @@ All endpoints (except /api/v1/auth/token/) require a JWT Bearer token.
     },
     'TAGS': [
         {'name': 'auth',        'description': 'Authentication — JWT tokens'},
-        {'name': 'dashboard',   'description': 'Aggregated stats for CoS'},
-        {'name': 'meetings',    'description': 'Upload transcripts, receive webhooks'},
-        {'name': 'commitments', 'description': 'CRUD, confirm, escalate, resolve'},
-        {'name': 'conflicts',   'description': 'Cross-meeting contradiction detection'},
-        {'name': 'analytics',   'description': 'Delivery rates, risk trends'},
-        {'name': 'persons',     'description': 'Org participants + delivery stats'},
+        {'name': 'dashboard',   'description': 'Summary stats for CoS command centre'},
+        {'name': 'meetings',    'description': 'Upload transcripts, import prior commitments, receive webhooks'},
+        {'name': 'commitments', 'description': 'Confirm, escalate, resolve, defer, list with filters'},
+        {'name': 'persons',     'description': 'Org participants, used for owner picker'},
     ],
 }
