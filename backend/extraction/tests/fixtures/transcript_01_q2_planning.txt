@@ -1,0 +1,41 @@
+Meeting: Q2 Planning
+Date: 2026-04-22
+Participants: James B. (CEO), Sarah K. (Chief of Staff), Tom R. (VP Engineering), Maya L. (VP Product)
+
+---
+
+James: OK let's get started. We've got a lot to cover today — Q2 priorities, the board deck, and the EMEA expansion. Sarah, can you kick us off on the board deck?
+
+Sarah: Sure. The deck is mostly done but the pricing section is the last piece. I've been waiting on the EMEA scenario numbers from Finance. James, do you have a view on when we can expect those?
+
+James: Finance should have them by tomorrow. Sarah, if you get those by Thursday morning, can you turn around the pricing section the same day?
+
+Sarah: Yes, I'll have the pricing section of the board deck to you by end of Thursday.
+
+James: Perfect. Tom, what's the status on the engineering headcount ask we discussed last week?
+
+Tom: We've agreed on three senior backend roles. I just need to write up the hiring brief so HR know exactly what we're looking for — scope, comp band, the usual.
+
+James: When can we expect that?
+
+Tom: I'll send the hiring brief to HR by May 2nd. That gives them time to start the sourcing process before Q2 fully ramps up.
+
+James: Good. Maya, where are we on the product roadmap for Q2? The board is going to ask about it.
+
+Maya: I've been working on it this week. It's close. I want to make sure we're aligned on the top three initiatives before I circulate it.
+
+James: Let's align now. Can you have the draft ready to share before the end of this week?
+
+Maya: Yes, I'll have the product roadmap draft ready and shared with the team by Friday of this week.
+
+James: Excellent. One more thing — the EMEA partnership agreement. Rachel from Legal flagged that it needs executive sign-off before we can move forward. I said we'd get her a decision this week.
+
+Tom: Is there anything blocking the legal review?
+
+James: Not on our side. Rachel has everything she needs. I don't think we need to add anything here — she's on it.
+
+Sarah: I'll follow up with Rachel after this call to confirm her timeline.
+
+James: Good idea. Let's move on to the Q2 OKR check-in...
+
+[Meeting continues with OKR review — no further commitments]

@@ -1,0 +1,8 @@
+Owner,Commitment,Deadline,Priority,Notes
+Sarah K.,"Deliver Q2 board deck pricing section",30-Apr-2026,HIGH,"Waiting on Finance numbers first"
+Tom R.,"Send hiring brief to HR — 3 senior backend engineers",02-May-2026,MEDIUM,"Scope + comp band included"
+Maya L.,"Share product roadmap v2 draft with leadership",26-Apr-2026,HIGH,""
+Rachel V.,"Complete EMEA contract legal review — flag any risk clauses",01-May-2026,HIGH,"Needs financial appendix from James first"
+James B.,"Forward updated financial projections to Sarah K.",21-Apr-2026,MEDIUM,"For board deck pricing section"
+Priya M.,"Deploy load balancer hotfix to production",24-Apr-2026,HIGH,"Staging deploy first"
+Finance,"Submit Q2 EMEA revenue scenario modelling to Sarah",29-Apr-2026,MEDIUM,""

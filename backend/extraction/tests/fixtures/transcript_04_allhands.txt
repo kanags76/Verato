@@ -1,0 +1,25 @@
+Meeting: Weekly All-Hands
+Date: 2026-04-25
+Participants: James B. (CEO), Sarah K. (Chief of Staff), Tom R. (VP Engineering), Maya L. (VP Product), Finance Team
+
+---
+
+James: Good morning everyone. Glad to have you all here. A few quick things before we go into questions.
+
+First, Q2 is off to a strong start. Engineering shipped the new auth layer on time, product has the roadmap almost locked, and our pipeline looks healthy. Thank you all for the effort this quarter.
+
+Second, I want to address a question that's been circulating on Slack — when are we announcing the EMEA expansion? I know there's been a lot of speculation. The commercial terms are close to being finalised. Legal is reviewing the contract now. I'll confirm the EMEA expansion announcement date by Monday morning and share it with the whole company immediately. I want you to hear it from me first, not through the grapevine.
+
+Third, a reminder that Q2 performance reviews are coming up in two weeks. Your managers will be scheduling those conversations shortly.
+
+Now, open questions. Who wants to start?
+
+Tom: How should we think about headcount in H2? Is there a hiring freeze likely?
+
+James: No freeze. We're planning to grow headcount by around 15% in H2, focused on engineering and go-to-market. Tom, your hiring brief will help us size the backend team specifically.
+
+Maya: On the roadmap — when should we expect the final prioritisation to be locked?
+
+James: By end of this week, based on what we discussed in Q2 planning. Maya's got that in hand.
+
+[Q&A continues — no further commitments made]

@@ -1,0 +1,29 @@
+Meeting: Engineering Standup
+Date: 2026-04-24
+Participants: Tom R. (VP Engineering), Alex C. (Senior Backend Engineer), Priya M. (DevOps Lead)
+
+---
+
+Tom: Morning everyone. Quick standup. Alex, what are you on today?
+
+Alex: Finished the auth middleware refactor yesterday. Today I'm wrapping up the API documentation for the new endpoints — should be done end of day. I'll have the API documentation for the v2 endpoints complete by end of day today.
+
+Tom: Great. Is it in Confluence or in the repo?
+
+Alex: In the repo, OpenAPI spec. Will ping you when it's merged.
+
+Tom: Perfect. Priya, how's the staging environment looking?
+
+Priya: We had a DNS issue last night that caused about 20 minutes of downtime. I've identified the root cause — it's a misconfigured health check on the load balancer. I'll push the hotfix to staging before our next standup Thursday morning. Should be a clean fix.
+
+Tom: Do you need anything from me to unblock that?
+
+Priya: No, I've got it. Just needs a config change and a redeploy.
+
+Tom: OK. I'm heads down on the Q2 hiring brief today. No blockers. Let's sync async if anything comes up. Anything else?
+
+Alex: Nothing from me.
+
+Priya: All good.
+
+Tom: OK, see you all Thursday.

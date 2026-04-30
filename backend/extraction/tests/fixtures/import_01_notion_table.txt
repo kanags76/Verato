@@ -1,0 +1,12 @@
+Action Items — Leadership Team
+Exported from Notion: Q2 Planning Tracker
+Last updated: 22 Apr 2026
+
+| Owner       | Action Item                                              | Due Date   | Status      |
+|-------------|----------------------------------------------------------|------------|-------------|
+| Sarah K.    | Send Q2 board deck — pricing section to James            | 30 Apr     | In Progress |
+| Tom R.      | Share hiring brief with HR (3x senior backend roles)     | 2 May      | Not Started |
+| Maya L.     | Circulate Q2 product roadmap draft for team review       | 26 Apr     | In Progress |
+| Rachel V.   | Complete EMEA partnership contract legal review          | 1 May      | In Progress |
+| James B.    | Send financial appendix to Rachel for contract review    | 23 Apr     | Not Started |
+| Finance     | Update Q2 forecast with EMEA revenue scenarios           | 29 Apr     | Not Started |
