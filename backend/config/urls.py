@@ -7,11 +7,21 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenBlacklistView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/v1/', include([
+        # Auth
+        path('auth/token/',           TokenObtainPairView.as_view(),  name='token_obtain_pair'),
+        path('auth/token/refresh/',   TokenRefreshView.as_view(),     name='token_refresh'),
+        path('auth/token/blacklist/', TokenBlacklistView.as_view(),   name='token_blacklist'),
+        # App routers
         path('', include('apps.accounts.urls')),
         path('', include('apps.meetings.urls')),
         path('', include('apps.commitments.urls')),
