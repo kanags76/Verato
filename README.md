@@ -13,10 +13,10 @@ Accountability layer for organisations. Extracts every commitment made in meetin
 Verato/
 ├── backend/                   Django project
 │   ├── apps/
-│   │   ├── accounts/          Users, Organisations, Persons
-│   │   ├── meetings/          Meeting ingestion + transcripts
-│   │   ├── commitments/       Core entity — track, escalate, resolve
-│   │   ├── notifications/     Slack nudges, weekly email digest
+│   │   ├── accounts/          Organisation, User, Person (+ serializers, views, urls)
+│   │   ├── meetings/          Meeting, MeetingParticipant (+ serializers, views, urls)
+│   │   ├── commitments/       Commitment, EscalationEvent, ExtractionFeedback (+ serializers, views, urls)
+│   │   ├── notifications/     Week 6 — Slack nudges, weekly email digest
 │   │   └── analytics/         Phase 2 — delivery rates, risk trends
 │   ├── extraction/            AI extraction engine (pure Python, no Django dependency)
 │   │   ├── extractor.py       extract_commitments() — transcript → JSON
@@ -200,14 +200,14 @@ lsof -i :6379   # Redis
 | Week | Feature | Branch | Status |
 |---|---|---|---|
 | 1 | Extraction engine (transcript + import) | `feature/week1-extraction-engine` | ✓ Done |
-| 2 | Django models + API skeleton | `feature/week2-models-api` | ⏳ Next |
-| 3 | Ingestion pipeline + prior import | `feature/week3-ingestion` | — |
+| 2 | Django models + API skeleton | `feature/week2-models-api` | ✓ Done |
+| 3 | Ingestion pipeline + prior import | `feature/week3-ingestion` | ⏳ Next |
 | 4 | Commitment actions + dashboard API | `feature/week4-commitment-actions` | — |
 | 5 | Risk scoring + status automation | `feature/week5-risk-scoring` | — |
 | 6 | Slack nudges + weekly digest email | `feature/week6-notifications` | — |
 
 ```
-PHASE 1 — Local backend (Weeks 1–6)       ← Week 1 complete
+PHASE 1 — Local backend (Weeks 1–6)       ← Week 2 complete
 PHASE 2 — Deploy to AWS ECS               (after Week 6)
 PHASE 3 — Frontend on GCP Cloud Run       (after Phase 2)
 ```
