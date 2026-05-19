@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Third party
+    'anymail',
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -120,6 +121,22 @@ GOOGLE_CLOUD_LOCATION   = config('GOOGLE_CLOUD_LOCATION',   default='us-central1
 GEMINI_EXTRACTION_MODEL = config('GEMINI_EXTRACTION_MODEL', default='gemini-2.5-flash-lite')
 GEMINI_CLASSIFY_MODEL   = config('GEMINI_CLASSIFY_MODEL',   default='gemini-2.5-flash-lite')
 GEMINI_EMBEDDING_MODEL  = config('GEMINI_EMBEDDING_MODEL',  default='text-embedding-004')
+
+# ── Email (SendGrid via Anymail) ──────────────────────────────────────────────
+EMAIL_BACKEND   = 'anymail.backends.sendgrid.EmailBackend'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@verato.app')
+ANYMAIL = {
+    'SENDGRID_API_KEY': config('SENDGRID_API_KEY', default='placeholder'),
+}
+
+# ── Slack ─────────────────────────────────────────────────────────────────────
+SLACK_BOT_TOKEN      = config('SLACK_BOT_TOKEN',      default='')
+SLACK_SIGNING_SECRET = config('SLACK_SIGNING_SECRET',  default='')
+SLACK_CLIENT_ID      = config('SLACK_CLIENT_ID',      default='')
+SLACK_CLIENT_SECRET  = config('SLACK_CLIENT_SECRET',  default='')
+SLACK_OAUTH_REDIRECT_URI = config('SLACK_OAUTH_REDIRECT_URI', default='http://localhost:8000/api/v1/slack/oauth/callback/')
+
+APP_BASE_URL = config('APP_BASE_URL', default='http://localhost:3000')
 
 STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'

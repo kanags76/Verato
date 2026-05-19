@@ -64,23 +64,38 @@ def make_mock_client(response_text: str) -> MagicMock:
     return mock_client
 
 
-SAMPLE_COMMITMENTS_JSON = json.dumps([
-    {
-        "raw_text": "I'll have the report to you by Friday.",
-        "normalised_text": "Alice will deliver the report by Friday.",
-        "commit_type": "explicit",
-        "owner_name": "Alice",
-        "deadline_text": "by Friday",
-        "deadline_resolved": "2026-05-01",
-        "confidence": 0.93,
-    },
-    {
-        "raw_text": "I'll send the contract to legal by end of day.",
-        "normalised_text": "Bob will send the contract to legal by end of day.",
-        "commit_type": "explicit",
-        "owner_name": "Bob",
-        "deadline_text": "end of day",
-        "deadline_resolved": None,
-        "confidence": 0.87,
-    },
-])
+# Week 3.5 format — the dict structure returned by extract_commitments() and extract_from_document().
+SAMPLE_EXTRACTION_RESPONSE = {
+    "commitments": [
+        {
+            "raw_text": "I'll have the report to you by Friday.",
+            "normalised_text": "Alice will deliver the report by Friday.",
+            "commit_type": "explicit",
+            "owner_name": "Alice",
+            "deadline_text": "by Friday",
+            "deadline_resolved": "2026-05-01",
+            "confidence": 0.93,
+            "tags": ["report delivery"],
+        },
+        {
+            "raw_text": "I'll send the contract to legal by end of day.",
+            "normalised_text": "Bob will send the contract to legal by end of day.",
+            "commit_type": "explicit",
+            "owner_name": "Bob",
+            "deadline_text": "end of day",
+            "deadline_resolved": None,
+            "confidence": 0.87,
+            "tags": ["legal review", "contract"],
+        },
+    ],
+    "meeting_topics": [
+        {"label": "report delivery", "confidence": 0.95},
+        {"label": "legal review",    "confidence": 0.88},
+        {"label": "contract",        "confidence": 0.82},
+    ],
+    "meeting_type": "team",
+    "meeting_summary": "Team reviewed report delivery timeline and contract handover to legal.",
+}
+
+# JSON string of the above — passed to make_mock_client() in tests.
+SAMPLE_COMMITMENTS_JSON = json.dumps(SAMPLE_EXTRACTION_RESPONSE)

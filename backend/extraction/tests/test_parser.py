@@ -3,7 +3,7 @@ Pure unit tests for extraction/parser.py — no DB, no network, no mocking.
 """
 import json
 import pytest
-from extraction.parser import safe_json_parse
+from extraction.parser import safe_json_parse, parse_extraction_response
 
 
 pytestmark = pytest.mark.unit
@@ -116,3 +116,145 @@ class TestSafeJsonParseInvalid:
 
     def test_partial_json_returns_empty(self):
         assert safe_json_parse('[{"raw_text": "incomplete') == []
+
+
+# ---------------------------------------------------------------------------
+# Tests for parse_extraction_response() — Week 3.5 extended format
+# ---------------------------------------------------------------------------
+
+VALID_EXTENDED = {
+    "commitments": [
+        {
+            "raw_text": "I'll have the report ready by Friday.",
+            "normalised_text": "Alice will deliver the report by Friday.",
+            "commit_type": "explicit",
+            "owner_name": "Alice",
+            "deadline_text": "by Friday",
+            "deadline_resolved": "2026-05-01",
+            "confidence": 0.91,
+            "tags": ["report delivery"],
+        }
+    ],
+    "meeting_topics": [
+        {"label": "report delivery", "confidence": 0.95},
+        {"label": "q2 planning",     "confidence": 0.88},
+    ],
+    "meeting_type": "leadership",
+    "meeting_summary": "Team discussed Q2 planning and report delivery.",
+}
+
+
+@pytest.mark.unit
+class TestParseExtractionResponse:
+
+    # --- Valid new format ---
+
+    def test_returns_dict_with_four_keys(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert set(result.keys()) == {"commitments", "topics", "meeting_type", "summary"}
+
+    def test_commitments_extracted(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert len(result["commitments"]) == 1
+        assert result["commitments"][0]["owner_name"] == "Alice"
+
+    def test_commitment_tags_populated(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert result["commitments"][0]["tags"] == ["report delivery"]
+
+    def test_topics_extracted_and_filtered(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert len(result["topics"]) == 2
+        labels = [t["label"] for t in result["topics"]]
+        assert "report delivery" in labels
+
+    def test_topic_below_threshold_excluded(self):
+        data = {**VALID_EXTENDED, "meeting_topics": [
+            {"label": "main topic", "confidence": 0.80},
+            {"label": "weak topic", "confidence": 0.50},  # below 0.60 threshold
+        ]}
+        result = parse_extraction_response(json.dumps(data))
+        labels = [t["label"] for t in result["topics"]]
+        assert "main topic" in labels
+        assert "weak topic" not in labels
+
+    def test_meeting_type_returned(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert result["meeting_type"] == "leadership"
+
+    def test_summary_returned(self):
+        result = parse_extraction_response(json.dumps(VALID_EXTENDED))
+        assert result["summary"] == "Team discussed Q2 planning and report delivery."
+
+    def test_fenced_json_still_works(self):
+        fenced = "```json\n" + json.dumps(VALID_EXTENDED) + "\n```"
+        result = parse_extraction_response(fenced)
+        assert len(result["commitments"]) == 1
+
+    # --- Graceful fallbacks — never fail the pipeline ---
+
+    def test_missing_topics_defaults_empty(self):
+        data = {k: v for k, v in VALID_EXTENDED.items() if k != "meeting_topics"}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["topics"] == []
+
+    def test_missing_type_defaults_other(self):
+        data = {k: v for k, v in VALID_EXTENDED.items() if k != "meeting_type"}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["meeting_type"] == "other"
+
+    def test_invalid_type_defaults_other(self):
+        data = {**VALID_EXTENDED, "meeting_type": "not_a_real_type"}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["meeting_type"] == "other"
+
+    def test_missing_summary_defaults_empty_string(self):
+        data = {k: v for k, v in VALID_EXTENDED.items() if k != "meeting_summary"}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["summary"] == ""
+
+    def test_missing_tags_on_commitment_defaults_empty_list(self):
+        commitment_without_tags = {k: v for k, v in VALID_EXTENDED["commitments"][0].items() if k != "tags"}
+        data = {**VALID_EXTENDED, "commitments": [commitment_without_tags]}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["commitments"][0]["tags"] == []
+
+    def test_tags_normalised_to_lowercase(self):
+        commitment = {**VALID_EXTENDED["commitments"][0], "tags": ["Q2 Board Prep", "PRICING"]}
+        data = {**VALID_EXTENDED, "commitments": [commitment]}
+        result = parse_extraction_response(json.dumps(data))
+        assert result["commitments"][0]["tags"] == ["q2 board prep", "pricing"]
+
+    # --- Backward compat: flat array treated as commitments ---
+
+    def test_flat_array_backward_compat(self):
+        flat = json.dumps([VALID_EXTENDED["commitments"][0]])
+        result = parse_extraction_response(flat)
+        assert len(result["commitments"]) == 1
+        assert result["topics"] == []
+        assert result["meeting_type"] == "other"
+        assert result["summary"] == ""
+
+    # --- Garbage / failure inputs ---
+
+    def test_empty_string_returns_safe_defaults(self):
+        result = parse_extraction_response("")
+        assert result["commitments"] == []
+        assert result["topics"] == []
+        assert result["meeting_type"] == "other"
+        assert result["summary"] == ""
+
+    def test_garbage_input_returns_safe_defaults(self):
+        result = parse_extraction_response("I cannot help with that.")
+        assert result["commitments"] == []
+
+    def test_partial_json_returns_safe_defaults(self):
+        result = parse_extraction_response('{"commitments": [{"raw_text": "incomplete')
+        assert result["commitments"] == []
+
+    def test_all_meeting_type_choices_accepted(self):
+        valid_types = ["leadership", "one_on_one", "team", "project", "board", "external", "other"]
+        for mt in valid_types:
+            data = {**VALID_EXTENDED, "meeting_type": mt}
+            result = parse_extraction_response(json.dumps(data))
+            assert result["meeting_type"] == mt, f"Expected {mt} to be accepted"

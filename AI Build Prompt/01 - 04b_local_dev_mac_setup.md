@@ -1,18 +1,20 @@
-# Commitment OS — Infrastructure Reference
+# Verato — Infrastructure Reference
 ## Mac (Apple Silicon) · Homebrew-native · No Docker
 
-> **Session startup and daily workflow → see `02 - 04_build_plan.md` (top of file)**
+> **Session startup and daily workflow → see README.md (top of repo)**
 
 ---
 
 ## ENVIRONMENT STATUS — What's Installed
+
+### Backend
 
 | Component | Version | Status |
 |---|---|---|
 | PostgreSQL | 18.3 (Homebrew) | Running, auto-starts on login |
 | pgvector | 0.8.2 | Installed + enabled in commitment_os |
 | Redis | 7.x (Homebrew) | Running, auto-starts on login |
-| Python venv | 3.x | At `backend/.venv` |
+| Python venv | 3.14 | At `backend/.venv` |
 | Django | 6.0.4 | Installed |
 | Django REST Framework | 3.17.1 | Installed |
 | Celery | 5.6.3 | Installed |
@@ -20,8 +22,24 @@
 | psycopg2-binary | 2.9.12 | Installed |
 | python-decouple | 3.8 | Installed |
 | django-celery-results | 2.6.0 | Installed |
+| django-cors-headers | latest | Installed — `CORS_ALLOW_ALL_ORIGINS = True` in local |
 
-**Project path:** `~/Documents/Programs/Verato/backend`
+### Frontend
+
+| Component | Version | Status |
+|---|---|---|
+| Node.js | 24.13.1 | Installed (system) |
+| npm | 11.8.0 | Installed |
+| Next.js | 16.2.6 | Installed at `frontend/node_modules` |
+| React | 19.2.4 | Installed |
+| TypeScript | 5.x | Installed |
+| TanStack Query | v5 | Installed (server state) |
+| Axios | latest | Installed (API client) |
+| React Hook Form + Zod | latest | Installed (form validation) |
+| Tailwind CSS | v4 | Installed |
+
+**Backend path:** `~/Documents/Programs/Verato/backend`
+**Frontend path:** `~/Documents/Programs/Verato/frontend`
 **GitHub repo:** https://github.com/kanags76/Verato (private)
 **Database:** `commitment_os` on localhost:5432 (no password — Homebrew auth)
 
@@ -95,16 +113,34 @@ brew install redis
 brew services start redis
 ```
 
-### Python venv + dependencies
+### Python venv + backend dependencies
 
 ```bash
 cd ~/Documents/Programs/Verato/backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install django djangorestframework psycopg2-binary celery redis \
-    python-decouple drf-spectacular django-celery-results
-pip freeze > requirements.txt
+pip install -r requirements.txt
 ```
+
+### Node.js + frontend dependencies
+
+Node.js 24 was already installed on the system.
+
+```bash
+cd ~/Documents/Programs/Verato/frontend
+npm install      # installs all dependencies from package.json
+```
+
+### Frontend environment file
+
+Create `frontend/.env.local` (gitignored):
+
+```bash
+# Only needed if Django is not on the default port
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
+
+If the file doesn't exist, the frontend defaults to `http://localhost:8000/api/v1` automatically.
 
 ### GitHub
 
@@ -114,15 +150,28 @@ gh repo create kanags76/Verato --private --source . --remote origin --push
 
 ---
 
-## API Testing (no frontend needed)
+## API Testing
 
-### Swagger UI — primary
+### Frontend app — primary (Phase 2+)
+
+`http://localhost:3000`
+
+- Full UI — login, dashboard, upload, review, people, settings
+- Start with `/register` to create an account, or `/login` if you already have one
+
+### Swagger UI — backend API
 
 `http://localhost:8000/api/schema/ui/`
 
 - Every endpoint listed with full docs
 - Execute requests directly in the browser
 - JWT auth built in — Authorize once, all calls carry the token
+
+```
+1. POST /api/v1/auth/token/ → {"email": "admin@example.com", "password": "admin1234"}
+2. Copy the "access" value
+3. Click Authorize (top right) → enter: Bearer <token>
+```
 
 ### Django Admin — data inspection
 
@@ -138,8 +187,8 @@ POST http://localhost:8000/api/v1/auth/token/
 Content-Type: application/json
 
 {
-  "username": "admin",
-  "password": "yourpassword"
+  "email": "admin@example.com",
+  "password": "admin1234"
 }
 
 ### List commitments
@@ -149,7 +198,9 @@ Authorization: Bearer {{token}}
 
 ---
 
-## Phase 2 — Dockerfile (create at Week 12, not before)
+## Dockerfile (create at Phase 3, not before)
+
+### Backend
 
 ```dockerfile
 FROM python:3.12-slim
@@ -172,11 +223,33 @@ CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers
 EXPOSE 8000
 ```
 
+### Frontend
+
+```dockerfile
+FROM node:24-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:24-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
 ---
 
-## Phase 3 — Frontend (after AWS backend is live)
+## Phase 3 — AWS Deployment
 
-1. Open Google AI Studio (https://aistudio.google.com)
-2. Scaffold Next.js app — describe each screen, paste Swagger endpoint details as context
-3. Point `NEXT_PUBLIC_API_URL` at your AWS ALB domain
-4. Deploy to GCP Cloud Run
+After frontend is deployed and tested:
+
+1. Backend → AWS ECS (Fargate) behind ALB
+2. Frontend → Vercel (connects to ALB endpoint via `NEXT_PUBLIC_API_URL`)
+3. Database → RDS PostgreSQL
+4. Redis → ElastiCache
+5. Static files → S3 + CloudFront
