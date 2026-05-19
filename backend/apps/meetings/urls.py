@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import MeetingViewSet, MeetingUploadView, MeetingImportView, MeetingStatusView
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register('meetings', MeetingViewSet, basename='meeting')
 
 # Custom paths listed BEFORE router.urls so "upload" and "import" are not
