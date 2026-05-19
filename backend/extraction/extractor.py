@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_client() -> genai.Client:
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    if api_key:
+        return genai.Client(api_key=api_key)
+    # Local dev fallback: Vertex AI via ADC (gcloud auth application-default login)
     return genai.Client(
         vertexai=True,
         project=settings.GOOGLE_CLOUD_PROJECT,
