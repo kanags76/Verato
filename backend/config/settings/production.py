@@ -2,8 +2,20 @@ from .base import *
 from decouple import config
 
 DEBUG = False
-ALLOWED_HOSTS        = config('ALLOWED_HOSTS',        cast=lambda v: [s.strip() for s in v.split(',')])
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS       = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])
+CORS_ALLOW_ALL_ORIGINS = True
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO'},
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}
 
 # S3 file storage — only enabled if bucket name is provided
 _s3_bucket = config('AWS_S3_BUCKET_NAME', default='')
