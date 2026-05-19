@@ -15,10 +15,10 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         from .models import User
         email = attrs.pop('email', '').lower()
-        try:
-            user = User.objects.get(email__iexact=email)
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
             attrs['username'] = user.username
-        except User.DoesNotExist:
+        else:
             attrs['username'] = email  # will fail authentication naturally
         return super().validate(attrs)
 
