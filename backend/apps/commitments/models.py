@@ -5,6 +5,28 @@ from apps.accounts.models import Organisation, Person
 from apps.meetings.models import Meeting
 
 
+class CommitmentTag(models.Model):
+    """
+    Thematic tags applied to individual commitments. Deduplicated per org —
+    one record shared across all commitments with the same label.
+    These are the edges in the Phase 2 person knowledge graph.
+    """
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='commitment_tags')
+    label        = models.CharField(max_length=255)
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.label
+
+    class Meta:
+        db_table = 'commitments_commitmenttag'
+        unique_together = [['organisation', 'label']]
+        indexes = [
+            models.Index(fields=['organisation', 'label']),
+        ]
+
+
 class Commitment(models.Model):
     """
     THE core entity. Lifecycle:
@@ -27,6 +49,11 @@ class Commitment(models.Model):
         DELIVERED      = 'delivered',      'Delivered'
         DEFERRED       = 'deferred',       'Deferred'
         CANCELLED      = 'cancelled',      'Cancelled'
+
+    class Priority(models.TextChoices):
+        HIGH   = 'high',   'High (P1)'
+        MEDIUM = 'medium', 'Medium (P2)'
+        LOW    = 'low',    'Low (P3)'
 
     class Source(models.TextChoices):
         TRANSCRIPT = 'transcript', 'Extracted from transcript'
@@ -52,6 +79,10 @@ class Commitment(models.Model):
     meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name='commitments')
     source  = models.CharField(max_length=20, choices=Source.choices, default=Source.TRANSCRIPT)
 
+    # Week 3.5 — thematic tags; edges for the Phase 2 knowledge graph
+    tags = models.ManyToManyField(CommitmentTag, blank=True, related_name='commitments')
+
+    priority   = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIUM)
     status     = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING_REVIEW)
     risk_score = models.FloatField(default=0.0)
 
@@ -89,6 +120,7 @@ class Commitment(models.Model):
             models.Index(fields=['organisation', 'risk_score']),
             models.Index(fields=['meeting']),
             models.Index(fields=['organisation', 'source']),
+            models.Index(fields=['organisation', 'priority']),
         ]
 
 

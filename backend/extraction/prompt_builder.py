@@ -6,9 +6,7 @@ def build_transcript_prompt(
 ) -> str:
     """
     Build the Gemini prompt for extracting commitments from a meeting transcript.
-
-    meeting_date should be ISO format (YYYY-MM-DD) so the model can resolve
-    relative deadlines like "end of Thursday" to a concrete date.
+    Returns the Week 3.5 extended JSON format (commitments + topics + type + summary).
     """
     participants_str = ", ".join(participants) if participants else "unknown"
 
@@ -24,7 +22,7 @@ def build_transcript_prompt(
     context_lines.append(f"Participants: {participants_str}")
     context = "\n".join(context_lines)
 
-    return f"""You are an expert at extracting explicit commitments from meeting transcripts.
+    return f"""You are an expert at extracting explicit commitments and thematic topics from meeting transcripts.
 
 A commitment is when a specific person explicitly promises to deliver a specific thing by a specific time.
 
@@ -42,17 +40,29 @@ EXCLUDE — everything that is not an explicit commitment:
 
 {context}
 
-For each commitment found, return a JSON object with exactly these keys:
-  "raw_text"         — verbatim sentence(s) from the transcript that contain the commitment
-  "normalised_text"  — clean, third-person sentence with pronouns resolved to names from the participant list
+Return a single JSON object with exactly these top-level keys:
+
+"commitments" — array of commitment objects. For each commitment:
+  "raw_text"         — verbatim sentence(s) from the transcript containing the commitment
+  "normalised_text"  — clean third-person sentence with pronouns resolved to names from the participant list
   "commit_type"      — always the string "explicit"
   "owner_name"       — full name of the person making the commitment (match to participant list where possible)
-  "deadline_text"    — exactly how the deadline was stated in the meeting (e.g. "end of Thursday", "by May 2nd")
+  "deadline_text"    — exactly how the deadline was stated ("end of Thursday", "by May 2nd")
   "deadline_resolved"— ISO date YYYY-MM-DD resolved from meeting_date context, or null if cannot determine
   "confidence"       — float 0.0–1.0: your confidence this is a genuine, explicit commitment
+  "tags"             — array of 1–3 lowercase 2-4 word noun-phrase strings labelling the theme of this commitment
+                       e.g. ["q2 board prep", "pricing"] — must be a subset of meeting_topics labels
 
-Return ONLY a valid JSON array. No markdown. No explanation. No trailing text.
-If no commitments are found, return [].
+"meeting_topics" — array of thematic topic objects for the whole meeting (2–5 topics):
+  "label"      — 2-4 word lowercase noun phrase e.g. "q2 board prep", "emea pricing", "senior hiring"
+  "confidence" — float 0.0–1.0: confidence this is a genuine theme for the meeting
+
+"meeting_type" — one of: leadership, one_on_one, team, project, board, external, other
+
+"meeting_summary" — 2-3 sentence plain English summary of the meeting's key discussion and decisions
+
+Return ONLY valid JSON. No markdown fences. No explanation. No trailing text.
+If no commitments are found, return an empty "commitments" array but still populate topics, type, and summary.
 
 Transcript:
 {transcript}"""
@@ -60,16 +70,18 @@ Transcript:
 
 def build_import_prompt(text: str) -> str:
     """
-    Build the Gemini prompt for extracting commitments from a prior-commitments
-    document (Notion export, spreadsheet, email thread, plain text action list).
+    Build the Gemini prompt for extracting commitments from a prior-commitments document.
+    Returns the Week 3.5 format — commitments with tags; topics and summary are empty for imports.
     """
     return f"""You are an expert at extracting action items and commitments from documents.
 
 The document below may be a Notion table export, a spreadsheet paste, an email thread, meeting notes,
-or a plain text list of action items. Your job is to extract every item that represents a clear,
-actionable commitment: a specific person owes a specific deliverable, ideally by a specific date.
+or a plain text list of action items. Extract every item that represents a clear, actionable commitment:
+a specific person owes a specific deliverable, ideally by a specific date.
 
-For each item found, return a JSON object with exactly these keys:
+Return a single JSON object with exactly these top-level keys:
+
+"commitments" — array of commitment objects. For each item:
   "raw_text"         — the original text exactly as it appears in the document
   "normalised_text"  — a clean, complete sentence describing the commitment
   "commit_type"      — always the string "explicit"
@@ -80,9 +92,15 @@ For each item found, return a JSON object with exactly these keys:
                        0.9+ for structured rows with clear owner + date
                        0.7–0.89 for items missing owner or date but clearly a commitment
                        below 0.7 for vague or ambiguous items
+  "tags"             — array of 1–3 lowercase 2-4 word noun-phrase strings labelling the theme
+                       e.g. ["q2 board prep", "vendor selection"]
 
-Return ONLY a valid JSON array. No markdown. No explanation.
-If no commitments are found, return [].
+"meeting_topics"  — empty array []
+"meeting_type"    — the string "other"
+"meeting_summary" — empty string ""
+
+Return ONLY valid JSON. No markdown fences. No explanation.
+If no commitments are found, return an empty "commitments" array.
 
 Document:
 {text}"""

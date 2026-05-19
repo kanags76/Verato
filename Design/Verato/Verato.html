@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verato — Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { background: #0c0c0f; font-family: 'Plus Jakarta Sans', sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a38; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a50; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .fade-in { animation: fadeIn 0.25s ease forwards; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+    input[type="range"] { height: 4px; }
+    select {
+      background: #13131a; border: 1px solid #2a2a38; border-radius: 6px;
+      padding: 8px 10px; color: #e8e8f0; font-size: 13px; font-family: 'Plus Jakarta Sans', sans-serif;
+      cursor: pointer; outline: none;
+    }
+    button:focus-visible { outline: 2px solid #7c6af7; outline-offset: 2px; }
+    input:focus-visible { outline: none; }
+    textarea { color-scheme: dark; }
+    input { color-scheme: dark; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Data -->
+<script src="verato/data.js"></script>
+
+<!-- Components (loaded first, sets up window globals) -->
+<script type="text/babel" src="verato/components.jsx"></script>
+
+<!-- Responsive primitives (loaded right after components — depends on T, NAV_ITEMS) -->
+<script type="text/babel" src="verato/responsive.jsx"></script>
+
+<!-- Screens -->
+<script type="text/babel" src="verato/screens-auth.jsx"></script>
+<script type="text/babel" src="verato/screens-dashboard.jsx"></script>
+<script type="text/babel" src="verato/screens-meetings.jsx"></script>
+
+<!-- Tweaks panel -->
+<script type="text/babel" src="verato/tweaks-panel.jsx"></script>
+
+<!-- Main app -->
+<script type="text/babel">
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "density": "balanced",
+  "accentColor": "#7c6af7",
+  "startScreen": "dashboard",
+  "mobileNav": "drawer",
+  "mobileDashLayout": "cards"
+}/*EDITMODE-END*/;
+
+// ── Meetings list screen ───────────────────────────────────────────────────────
+const MeetingsList = ({ onNavigate, onUpload, onViewMeeting }) => {
+  return React.createElement('div', {
+    style: { flex: 1, overflow: 'auto', fontFamily: "'Plus Jakarta Sans', sans-serif" }
+  },
+    React.createElement(PageHeader, {
+      title: 'Meetings',
+      subtitle: `${MOCK_MEETINGS.length} meetings processed`,
+      actions: [
+        React.createElement(Btn, { key: 'imp', variant: 'secondary', size: 'sm', icon: Icons.Import, onClick: () => onNavigate('import') }, 'Import'),
+        React.createElement(Btn, { key: 'up', variant: 'primary', size: 'sm', icon: Icons.Upload, onClick: onUpload }, 'Upload transcript'),
+      ],
+    }),
+    React.createElement('div', { style: { padding: '20px 32px' } },
+      React.createElement('div', { style: { border: `1px solid ${T.border}`, borderRadius: 8, overflow: 'hidden' } },
+        React.createElement('div', {
+          style: { display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 16, padding: '10px 16px', background: T.surface, borderBottom: `1px solid ${T.border}` }
+        },
+          ['Meeting', 'Type', 'Date', 'Commitments'].map((h, i) =>
+            React.createElement('div', { key: i, style: { fontSize: 11, fontWeight: 600, color: T.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em' } }, h)
+          )
+        ),
+        MOCK_MEETINGS.map((m, i) =>
+          React.createElement('div', {
+            key: m.id,
+            style: {
+              display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 16,
+              padding: '14px 16px', alignItems: 'center',
+              borderBottom: i < MOCK_MEETINGS.length - 1 ? `1px solid ${T.borderFaint}` : 'none',
+              cursor: 'pointer',
+            },
+            onClick: () => onViewMeeting(m),
+          },
+            React.createElement('div', {},
+              React.createElement('div', { style: { fontSize: 13, fontWeight: 600, color: T.text } }, m.title),
+              React.createElement('div', { style: { fontSize: 11, color: T.textFaint, marginTop: 2 } },
+                `${m.commitment_count} commitment${m.commitment_count !== 1 ? 's' : ''} extracted`
+              ),
+            ),
+            React.createElement('span', {
+              style: {
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 600,
+                letterSpacing: '0.06em', color: T.textMid, textTransform: 'uppercase',
+              }
+            }, m.meeting_type.replace('_', ' ')),
+            React.createElement('span', { style: { fontSize: 12, color: T.textFaint } },
+              new Date(m.occurred_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+            ),
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+              React.createElement('span', { style: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 700, color: T.text } }, m.commitment_count),
+              React.createElement('div', {
+                style: { fontSize: 10, fontWeight: 600, color: T.onTrack, textTransform: 'uppercase', letterSpacing: '0.05em' }
+              }, '● done'),
+            ),
+          )
+        )
+      )
+    )
+  );
+};
+
+// ── People list ───────────────────────────────────────────────────────────────
+const PeopleList = ({ onNavigate }) => {
+  return React.createElement('div', {
+    style: { flex: 1, overflow: 'auto', fontFamily: "'Plus Jakarta Sans', sans-serif" }
+  },
+    React.createElement(PageHeader, { title: 'People', subtitle: `${MOCK_PEOPLE.length} tracked participants` }),
+    React.createElement('div', { style: { padding: '20px 32px' } },
+      React.createElement('div', {
+        style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }
+      },
+        MOCK_PEOPLE.map(p => {
+          const dr = Math.round(p.delivery_rate * 100);
+          const drColor = dr >= 85 ? T.onTrack : dr >= 65 ? T.risk : T.overdue;
+          return React.createElement(Card, {
+            key: p.id,
+            style: { padding: '18px 20px' },
+            onClick: () => {},
+          },
+            React.createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 } },
+              React.createElement(Avatar, { name: p.name, size: 36 }),
+              React.createElement('div', {},
+                React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: T.text } }, p.name),
+                React.createElement('div', { style: { fontSize: 12, color: T.textFaint, marginTop: 2 } }, p.role),
+              ),
+            ),
+            React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+              [
+                ['Commitments', p.total_commitments],
+                ['Meetings', p.meeting_count],
+              ].map(([label, val]) =>
+                React.createElement('div', { key: label },
+                  React.createElement('div', { style: { fontSize: 10, color: T.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 } }, label),
+                  React.createElement('div', { style: { fontSize: 18, fontWeight: 700, color: T.text, fontFamily: "'JetBrains Mono', monospace" } }, val),
+                )
+              )
+            ),
+            React.createElement('div', { style: { marginTop: 14 } },
+              React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 5 } },
+                React.createElement('span', { style: { fontSize: 10, color: T.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em' } }, 'Delivery rate'),
+                React.createElement('span', { style: { fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, color: drColor } }, `${dr}%`),
+              ),
+              React.createElement('div', { style: { height: 4, background: T.border, borderRadius: 2, overflow: 'hidden' } },
+                React.createElement('div', { style: { width: `${dr}%`, height: '100%', background: drColor, borderRadius: 2, transition: 'width 0.6s ease' } })
+              )
+            )
+          );
+        })
+      )
+    )
+  );
+};
+
+// ── App shell ─────────────────────────────────────────────────────────────────
+const App = () => {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const { isMobile } = useViewport();
+
+  const [screen, setScreen] = React.useState(tweaks.startScreen || 'signup_plan');
+  const [signupPlan, setSignupPlan] = React.useState(null);
+  const [selectedCommitment, setSelectedCommitment] = React.useState(null);
+  const [uploadFlow, setUploadFlow] = React.useState('form'); // form | review
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+
+  // Apply theme on mount + when tweak changes
+  React.useEffect(() => {
+    applyTheme(tweaks.theme || 'dark');
+  }, [tweaks.theme]);
+
+  const navigate = (s) => {
+    setScreen(s);
+    setSelectedCommitment(null);
+  };
+
+  // Map current screen to a mobile top-bar title + back behaviour
+  const mobileBar = () => {
+    const map = {
+      dashboard: { title: 'Dashboard', subtitle: 'Week of 28 Apr' },
+      commitments: { title: 'Commitments' },
+      commitment_detail: { title: 'Commitment', onBack: () => setScreen('dashboard') },
+      meetings: { title: 'Meetings' },
+      upload: { title: 'Upload', onBack: () => setScreen('meetings') },
+      review: { title: 'Review extracts', onBack: () => setScreen('upload') },
+      import: { title: 'Import' },
+      people: { title: 'Team' },
+      settings: { title: 'Settings' },
+    };
+    return map[screen] || { title: 'Verato' };
+  };
+
+  // Auth / onboarding screens (no sidebar)
+  const authScreens = ['signup_plan', 'signup_form', 'onboarding_slack', 'onboarding_import'];
+  const isAuth = authScreens.includes(screen);
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'signup_plan':
+        return React.createElement(SignupPlan, {
+          onSelect: (plan) => { setSignupPlan(plan); setScreen('signup_form'); }
+        });
+      case 'signup_form':
+        return React.createElement(SignupForm, {
+          plan: signupPlan,
+          onBack: () => setScreen('signup_plan'),
+          onSubmit: () => setScreen('onboarding_slack'),
+        });
+      case 'onboarding_slack':
+        return React.createElement(OnboardingSlack, {
+          orgName: 'Acme Corp',
+          step: 0,
+          onConnect: () => setScreen('onboarding_import'),
+          onSkip: () => setScreen('onboarding_import'),
+        });
+      case 'onboarding_import':
+        return React.createElement(OnboardingImport, {
+          onNext: () => setScreen('dashboard'),
+          onSkip: () => setScreen('dashboard'),
+        });
+      case 'dashboard':
+        return React.createElement(Dashboard, {
+          onNavigate: navigate,
+          onViewCommitment: (c) => { setSelectedCommitment(c); setScreen('commitment_detail'); },
+          onUpload: () => { setUploadFlow('form'); setScreen('upload'); },
+        });
+      case 'commitment_detail':
+        return selectedCommitment
+          ? React.createElement(CommitmentDetail, {
+              commitment: selectedCommitment,
+              onBack: () => setScreen('dashboard'),
+              onAction: (action, c) => {},
+            })
+          : React.createElement('div', {}, 'Not found');
+      case 'meetings':
+        return React.createElement(MeetingsList, {
+          onNavigate: navigate,
+          onUpload: () => { setUploadFlow('form'); setScreen('upload'); },
+          onViewMeeting: (m) => { setScreen('review'); },
+        });
+      case 'upload':
+        return React.createElement(UploadTranscript, {
+          onBack: () => setScreen('meetings'),
+          onSubmit: () => { setUploadFlow('review'); setScreen('review'); },
+        });
+      case 'review':
+        return React.createElement(ExtractionReview, {
+          meetingTitle: 'Q2 Planning · 22 Apr',
+          onBack: () => setScreen('upload'),
+          onDone: () => setScreen('dashboard'),
+        });
+      case 'import':
+        return React.createElement(OnboardingImport, {
+          onNext: () => setScreen('dashboard'),
+          onSkip: () => setScreen('dashboard'),
+        });
+      case 'commitments':
+        return React.createElement('div', {
+          style: { flex: 1, padding: '28px 32px', fontFamily: "'Plus Jakarta Sans', sans-serif" }
+        },
+          React.createElement(PageHeader, {
+            title: 'Commitments',
+            subtitle: `${MOCK_COMMITMENTS.length} total commitments`,
+          }),
+          React.createElement('div', { style: { marginTop: 20 } },
+            MOCK_COMMITMENTS.map(c =>
+              React.createElement(CommitmentRow, {
+                key: c.id, commitment: c,
+                onClick: () => { setSelectedCommitment(c); setScreen('commitment_detail'); },
+              })
+            )
+          )
+        );
+      case 'people':
+        return React.createElement(PeopleList, { onNavigate: navigate });
+      case 'settings':
+        return React.createElement(SettingsTeam, { onNavigate: navigate });
+      default:
+        return React.createElement('div', { style: { padding: 32, color: T.textFaint } }, `Screen "${screen}" coming soon`);
+    }
+  };
+
+  // Auth flow — full screen, no sidebar
+  if (isAuth) {
+    return React.createElement('div', { style: { width: '100vw', height: '100vh', overflow: 'auto', background: T.bg }, className: 'fade-in' },
+      renderScreen(),
+      React.createElement(TweaksPanel, {},
+        React.createElement(TweakSection, { title: 'Navigation' },
+          React.createElement(TweakRadio, {
+            label: 'Jump to screen',
+            value: tweaks.startScreen,
+            onChange: v => { setTweak('startScreen', v); setScreen(v); },
+            options: [
+              { value: 'signup_plan', label: 'Sign-up' },
+              { value: 'dashboard', label: 'Dashboard' },
+              { value: 'upload', label: 'Upload' },
+              { value: 'review', label: 'Review' },
+            ],
+          }),
+        ),
+        React.createElement(TweakSection, { title: 'Accent colour' },
+          React.createElement(TweakColor, {
+            label: 'Brand accent',
+            value: tweaks.accentColor,
+            onChange: v => setTweak('accentColor', v),
+          }),
+        ),
+      ),
+    );
+  }
+
+  // Mobile shell — top bar + drawer or bottom nav
+  if (isMobile) {
+    const bar = mobileBar();
+    const useBottomNav = tweaks.mobileNav === 'bottom';
+    return React.createElement('div', {
+      style: { display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', background: T.bg },
+      className: 'fade-in',
+    },
+      React.createElement(MobileTopBar, {
+        title: bar.title,
+        subtitle: bar.subtitle,
+        onMenuClick: useBottomNav ? null : () => setDrawerOpen(true),
+        onBack: bar.onBack,
+      }),
+      React.createElement('div', {
+        key: screen,
+        style: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 },
+        className: 'fade-in',
+      },
+        renderScreen(),
+      ),
+      useBottomNav && React.createElement(MobileBottomNav, { activeScreen: screen, onNavigate: navigate }),
+      !useBottomNav && React.createElement(MobileDrawer, {
+        open: drawerOpen,
+        onClose: () => setDrawerOpen(false),
+        activeScreen: screen,
+        onNavigate: navigate,
+        theme: tweaks.theme,
+        onThemeToggle: () => setTweak('theme', tweaks.theme === 'dark' ? 'light' : 'dark'),
+      }),
+      React.createElement(TweaksPanel, {},
+        React.createElement(TweakSection, { title: 'Theme' },
+          React.createElement(TweakRadio, {
+            label: 'Mode', value: tweaks.theme,
+            onChange: v => setTweak('theme', v),
+            options: [{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }],
+          }),
+        ),
+        React.createElement(TweakSection, { title: 'Mobile nav' },
+          React.createElement(TweakRadio, {
+            label: 'Style', value: tweaks.mobileNav,
+            onChange: v => setTweak('mobileNav', v),
+            options: [{ value: 'drawer', label: 'Drawer' }, { value: 'bottom', label: 'Bottom tabs' }],
+          }),
+        ),
+        React.createElement(TweakSection, { title: 'Jump to screen' },
+          React.createElement(TweakRadio, {
+            label: 'Screen', value: screen,
+            onChange: v => { setTweak('startScreen', v); setScreen(v); },
+            options: [
+              { value: 'dashboard', label: 'Dash' },
+              { value: 'commitment_detail', label: 'Detail' },
+              { value: 'review', label: 'Review' },
+            ],
+          }),
+          React.createElement(TweakRadio, {
+            label: 'More', value: screen,
+            onChange: v => { setTweak('startScreen', v); setScreen(v); },
+            options: [
+              { value: 'upload', label: 'Upload' },
+              { value: 'meetings', label: 'Meet' },
+              { value: 'settings', label: 'Settings' },
+            ],
+          }),
+        ),
+      ),
+    );
+  }
+
+  // Desktop shell — sidebar + main content
+  return React.createElement('div', {
+    style: { display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: T.bg },
+    className: 'fade-in',
+  },
+    React.createElement(Sidebar, {
+      activeScreen: screen,
+      onNavigate: navigate,
+    }),
+    React.createElement('div', {
+      key: screen, // remount on nav to reset scroll
+      style: {
+        flex: 1, display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', minWidth: 0,
+      },
+      className: 'fade-in',
+    },
+      renderScreen(),
+    ),
+
+    // Tweaks
+    React.createElement(TweaksPanel, {},
+      React.createElement(TweakSection, { title: 'Navigation' },
+        React.createElement(TweakRadio, {
+          label: 'Jump to screen',
+          value: screen,
+          onChange: v => { setTweak('startScreen', v); setScreen(v); },
+          options: [
+            { value: 'signup_plan', label: 'Sign-up' },
+            { value: 'dashboard', label: 'Dashboard' },
+            { value: 'commitment_detail', label: 'Detail' },
+            { value: 'upload', label: 'Upload' },
+          ],
+        }),
+        React.createElement(TweakRadio, {
+          label: 'More screens',
+          value: screen,
+          onChange: v => { setTweak('startScreen', v); setScreen(v); },
+          options: [
+            { value: 'review', label: 'Review' },
+            { value: 'meetings', label: 'Meetings' },
+            { value: 'people', label: 'People' },
+            { value: 'settings', label: 'Settings' },
+          ],
+        }),
+      ),
+      React.createElement(TweakSection, { title: 'Accent colour' },
+        React.createElement(TweakColor, {
+          label: 'Brand accent',
+          value: tweaks.accentColor,
+          onChange: v => {
+            setTweak('accentColor', v);
+            // Live update T.accent across all components
+            window.T.accent = v;
+            window.T.accentDim = v + '55';
+          },
+        }),
+      ),
+    ),
+  );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@ app.autodiscover_tasks()
 app.conf.beat_schedule = {
     'recompute-risk-scores': {
         'task':     'apps.commitments.tasks.recompute_risk_scores',
-        'schedule': crontab(minute=0, hour='*/6'),
+        'schedule': crontab(minute=0, hour='*/24'),
     },
     'send-deadline-nudges': {
         'task':     'apps.notifications.tasks.send_deadline_nudges',

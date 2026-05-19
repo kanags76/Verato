@@ -11,6 +11,11 @@ _REQUIRED_FIELDS = {
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
+_VALID_MEETING_TYPES = {
+    "leadership", "one_on_one", "team", "project", "board", "external", "other",
+}
+_TOPIC_CONFIDENCE_THRESHOLD = 0.60
+
 
 def safe_json_parse(text: str) -> list[dict]:
     """
@@ -61,3 +66,119 @@ def safe_json_parse(text: str) -> list[dict]:
         results.append(item)
 
     return results
+
+
+def _apply_commitment_defaults(items: list) -> list[dict]:
+    """Apply field defaults to raw commitment items, including the Week 3.5 tags field."""
+    results = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            logger.warning("_apply_commitment_defaults: item %d is not a dict — skipped", idx)
+            continue
+
+        item.setdefault("raw_text", "")
+        item.setdefault("normalised_text", "")
+        item.setdefault("commit_type", "explicit")
+        item.setdefault("owner_name", "")
+        item.setdefault("deadline_text", "")
+        item.setdefault("deadline_resolved", None)
+        item.setdefault("confidence", 0.5)
+        item.setdefault("tags", [])
+
+        try:
+            item["confidence"] = float(item["confidence"])
+            item["confidence"] = max(0.0, min(1.0, item["confidence"]))
+        except (TypeError, ValueError):
+            item["confidence"] = 0.5
+
+        if not isinstance(item["tags"], list):
+            item["tags"] = []
+        else:
+            item["tags"] = [str(t).strip().lower() for t in item["tags"] if t]
+
+        results.append(item)
+    return results
+
+
+def parse_extraction_response(text: str) -> dict:
+    """
+    Parse the Week 3.5 extended Gemini extraction response.
+
+    Accepts both the new dict format and the old flat array (backward compat):
+      New: {"commitments": [...], "meeting_topics": [...], "meeting_type": "...", "meeting_summary": "..."}
+      Old: [{...}, {...}]  — treated as commitments with empty topics/type/summary
+
+    Returns:
+      {
+        "commitments":  list[dict],   each item has a "tags" field (list of lowercase strings)
+        "topics":       list[dict],   [{"label": str, "confidence": float}], only >= 0.60
+        "meeting_type": str,          one of _VALID_MEETING_TYPES, defaults to "other"
+        "summary":      str,          empty string if absent
+      }
+
+    Never raises — returns safe empty defaults on any parse failure.
+    """
+    _empty = {
+        "commitments": [], "topics": [], "meeting_type": "other", "summary": "",
+    }
+
+    if not text or not text.strip():
+        return _empty
+
+    cleaned = _FENCE_RE.sub("", text).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.warning("parse_extraction_response: decode failed (%s) | snippet: %.200s", exc, text)
+        return _empty
+
+    # Backward compat: bare array → treat as commitments, empty graph metadata
+    if isinstance(data, list):
+        return {
+            "commitments": _apply_commitment_defaults(data),
+            "topics":       [],
+            "meeting_type": "other",
+            "summary":      "",
+        }
+
+    if not isinstance(data, dict):
+        logger.warning("parse_extraction_response: expected dict or list, got %s", type(data).__name__)
+        return _empty
+
+    # Extract commitments
+    raw_commitments = data.get("commitments", [])
+    if not isinstance(raw_commitments, list):
+        raw_commitments = []
+
+    # Extract and filter topics
+    raw_topics = data.get("meeting_topics", [])
+    if not isinstance(raw_topics, list):
+        raw_topics = []
+    topics = []
+    for t in raw_topics:
+        if not isinstance(t, dict):
+            continue
+        label = str(t.get("label", "")).strip().lower()
+        if not label:
+            continue
+        try:
+            confidence = float(t.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            confidence = 1.0
+        if confidence >= _TOPIC_CONFIDENCE_THRESHOLD:
+            topics.append({"label": label, "confidence": confidence})
+
+    # Validate meeting_type
+    meeting_type = data.get("meeting_type", "other")
+    if not isinstance(meeting_type, str) or meeting_type not in _VALID_MEETING_TYPES:
+        meeting_type = "other"
+
+    summary = data.get("meeting_summary", "") or ""
+
+    return {
+        "commitments": _apply_commitment_defaults(raw_commitments),
+        "topics":      topics,
+        "meeting_type": meeting_type,
+        "summary":     str(summary),
+    }

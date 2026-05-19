@@ -4,7 +4,7 @@ from google import genai
 from django.conf import settings
 
 from .prompt_builder import build_transcript_prompt
-from .parser import safe_json_parse
+from .parser import parse_extraction_response
 
 logger = logging.getLogger(__name__)
 
@@ -22,22 +22,24 @@ def extract_commitments(
     participants: list[str],
     meeting_title: str = "",
     meeting_date: str = "",
-) -> list[dict]:
+) -> dict:
     """
-    Extract explicit commitments from a meeting transcript via Gemini.
+    Extract commitments, topics, meeting type, and summary from a transcript via Gemini.
 
-    Args:
-        transcript:    Full transcript text.
-        participants:  Names of meeting participants (used for pronoun resolution).
-        meeting_title: Optional title for prompt context.
-        meeting_date:  Optional ISO date (YYYY-MM-DD) for deadline resolution.
+    Returns a dict:
+      {
+        "commitments":  list[dict],   commitment objects with tags[]
+        "topics":       list[dict],   [{"label": str, "confidence": float}]
+        "meeting_type": str,          e.g. "leadership", "one_on_one", "team"
+        "summary":      str,          2-3 sentence meeting digest
+      }
 
-    Returns:
-        List of commitment dicts matching the extraction output schema.
-        Returns [] on empty input or Gemini failure.
+    Returns empty defaults on empty input or Gemini failure — never raises.
     """
+    _empty = {"commitments": [], "topics": [], "meeting_type": "other", "summary": ""}
+
     if not transcript or not transcript.strip():
-        return []
+        return _empty
 
     prompt = build_transcript_prompt(transcript, participants, meeting_title, meeting_date)
 
@@ -50,11 +52,12 @@ def extract_commitments(
         raw = response.text
     except Exception as exc:
         logger.error("extract_commitments: Gemini call failed: %s", exc)
-        return []
+        return _empty
 
-    commitments = safe_json_parse(raw)
+    result = parse_extraction_response(raw)
     logger.info(
-        "extract_commitments: title=%r participants=%d extracted=%d",
-        meeting_title, len(participants), len(commitments),
+        "extract_commitments: title=%r participants=%d commitments=%d topics=%d type=%s",
+        meeting_title, len(participants),
+        len(result["commitments"]), len(result["topics"]), result["meeting_type"],
     )
-    return commitments
+    return result

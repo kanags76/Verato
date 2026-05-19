@@ -4,7 +4,7 @@ from google import genai
 from django.conf import settings
 
 from .prompt_builder import build_import_prompt
-from .parser import safe_json_parse
+from .parser import parse_extraction_response
 
 logger = logging.getLogger(__name__)
 
@@ -17,21 +17,24 @@ def _get_client() -> genai.Client:
     )
 
 
-def extract_from_document(text: str) -> list[dict]:
+def extract_from_document(text: str) -> dict:
     """
     Extract commitments from a prior-commitments document via Gemini.
 
-    The document may be a Notion export, spreadsheet paste, email thread,
-    or any plain-text action-item list.  Unlike transcript extraction, there
-    is no participant list — owner names are taken directly from the document.
+    Returns a dict:
+      {
+        "commitments":  list[dict],   commitment objects with source='import' and tags[]
+        "topics":       list[dict],   always [] for import documents
+        "meeting_type": str,          always "other" for import documents
+        "summary":      str,          always "" for import documents
+      }
 
-    Each returned item has source='import' so the caller can tag Commitment
-    records with the correct source value.
-
-    Returns [] on empty input or Gemini failure.
+    Returns empty defaults on empty input or Gemini failure — never raises.
     """
+    _empty = {"commitments": [], "topics": [], "meeting_type": "other", "summary": ""}
+
     if not text or not text.strip():
-        return []
+        return _empty
 
     prompt = build_import_prompt(text)
 
@@ -44,11 +47,11 @@ def extract_from_document(text: str) -> list[dict]:
         raw = response.text
     except Exception as exc:
         logger.error("extract_from_document: Gemini call failed: %s", exc)
-        return []
+        return _empty
 
-    commitments = safe_json_parse(raw)
-    for item in commitments:
+    result = parse_extraction_response(raw)
+    for item in result["commitments"]:
         item["source"] = "import"
 
-    logger.info("extract_from_document: extracted=%d items", len(commitments))
-    return commitments
+    logger.info("extract_from_document: extracted=%d items", len(result["commitments"]))
+    return result

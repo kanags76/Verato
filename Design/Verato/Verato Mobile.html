@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Verato — Mobile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0f; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: #e6e6f0; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; padding: 32px 16px 48px; }
+
+  .stage-title {
+    text-align: center;
+    margin: 0 0 24px;
+  }
+  .stage-title h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .stage-title p { margin: 6px 0 0; font-size: 13px; color: #8a8a9e; }
+
+  .device-row {
+    display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; align-items: flex-start;
+  }
+
+  .device-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .device-col .caption { font-size: 11px; color: #8a8a9e; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; }
+
+  /* iPhone bezel — tuned to host the responsive Verato app at 390x844 logical */
+  .iphone {
+    width: 412px;
+    height: 866px;
+    background: #050507;
+    border-radius: 56px;
+    padding: 11px;
+    box-shadow:
+      0 0 0 2px #1a1a24,
+      0 0 0 3px #2a2a36,
+      0 30px 80px -10px rgba(0,0,0,0.7),
+      0 0 0 12px #0a0a10;
+    position: relative;
+  }
+  .iphone .screen {
+    width: 100%; height: 100%;
+    border-radius: 46px; overflow: hidden;
+    background: #0e0e15;
+    position: relative;
+    isolation: isolate;
+  }
+  /* Status-bar safe-area: solid background behind the status bar so the
+     iframe content tucks underneath cleanly. */
+  .iphone .status-bar-bg {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 50px;
+    background: #0e0e15;
+    z-index: 19;
+    pointer-events: none;
+  }
+  .iphone .notch {
+    position: absolute;
+    top: 18px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 34px;
+    background: #050507;
+    border-radius: 999px;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .iphone .status-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 50px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 36px 0;
+    font-size: 14px; font-weight: 600; color: #fff;
+    pointer-events: none;
+    z-index: 21;
+  }
+  .iphone .status-bar .icons { display: flex; gap: 6px; align-items: center; }
+  .iphone .status-bar svg { display: block; }
+
+  .iphone iframe {
+    position: absolute; top: 50px; left: 0; right: 0; bottom: 0;
+    width: 100%; height: calc(100% - 50px);
+    border: 0;
+    display: block;
+    background: #0e0e15;
+  }
+
+  /* The home indicator overlay */
+  .iphone .home-indicator {
+    position: absolute;
+    bottom: 18px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px;
+    background: rgba(255,255,255,0.85);
+    border-radius: 3px;
+    z-index: 22;
+    pointer-events: none;
+  }
+
+  /* Side buttons */
+  .iphone::before, .iphone::after {
+    content: ''; position: absolute; background: #1a1a24; border-radius: 2px;
+  }
+  .iphone::before {
+    width: 4px; height: 32px; left: -4px; top: 100px;
+    box-shadow: 0 56px 0 #1a1a24, 0 124px 0 0 #1a1a24;
+  }
+  .iphone::after {
+    width: 4px; height: 80px; right: -4px; top: 180px;
+  }
+
+  /* Scale down on narrow viewports so two devices fit, then one. */
+  @media (max-width: 920px) {
+    .device-row { gap: 24px; }
+    .iphone { transform: scale(0.85); transform-origin: top center; margin-bottom: -130px; }
+  }
+  @media (max-width: 480px) {
+    body { padding: 16px 8px; }
+    .iphone { transform: scale(0.78); margin-bottom: -190px; }
+    .stage-title h1 { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage-title">
+    <h1>Verato — Mobile</h1>
+    <p>Responsive in-place. Hamburger drawer + swipeable review. Tap into the frame to interact.</p>
+  </div>
+
+  <div class="device-row">
+    <div class="device-col">
+      <div class="caption">Drawer nav · Dashboard</div>
+      <div class="iphone">
+        <div class="screen">
+          <div class="status-bar-bg"></div>
+          <iframe src="Verato.html#mobile=1" title="Verato Mobile — drawer"></iframe>
+          <div class="notch"></div>
+          <div class="status-bar">
+            <span>9:41</span>
+            <span class="icons">
+              <svg width="17" height="11" viewBox="0 0 17 11" fill="none"><path d="M1.5 7.5L3.5 5.5M5.5 3.5L8 1L10.5 3.5M12.5 5.5L14.5 7.5" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg>
+              <svg width="16" height="11" viewBox="0 0 16 11" fill="white"><rect x="1" y="3" width="2" height="5" rx="0.5"/><rect x="5" y="2" width="2" height="7" rx="0.5"/><rect x="9" y="1" width="2" height="9" rx="0.5"/><rect x="13" y="0" width="2" height="11" rx="0.5"/></svg>
+              <svg width="26" height="11" viewBox="0 0 26 11" fill="none"><rect x="0.5" y="0.5" width="22" height="10" rx="2.5" stroke="white" stroke-opacity="0.8"/><rect x="2" y="2" width="18" height="7" rx="1.2" fill="white"/><rect x="23.5" y="3.5" width="1.5" height="4" rx="0.5" fill="white" fill-opacity="0.5"/></svg>
+            </span>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // The iframe loads Verato.html which auto-detects mobile by window.innerWidth (<768).
+    // The screen inside the bezel is ~390px wide which triggers mobile layout naturally.
+  </script>
+</body>
+</html>

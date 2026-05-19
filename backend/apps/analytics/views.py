@@ -1,3 +1,51 @@
-from django.shortcuts import render
+from datetime import date
 
-# Create your views here.
+from django.db.models import Count, Q
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
+
+from apps.commitments.models import Commitment
+from apps.accounts.views import get_user_org
+
+
+class DashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=['dashboard'],
+        summary='CoS command-centre summary stats',
+        responses={200: {
+            'type': 'object',
+            'properties': {
+                'overdue':      {'type': 'integer'},
+                'at_risk':      {'type': 'integer'},
+                'on_track':     {'type': 'integer'},
+                'total_active': {'type': 'integer'},
+            },
+        }},
+    )
+    def get(self, request):
+        org = get_user_org(request)
+        if org is None:
+            return Response({'overdue': 0, 'at_risk': 0, 'on_track': 0, 'total_active': 0})
+
+        today = date.today()
+        active_statuses = [
+            Commitment.Status.ACTIVE,
+            Commitment.Status.AT_RISK,
+            Commitment.Status.ESCALATED,
+            Commitment.Status.PENDING_REVIEW,
+        ]
+
+        summary = Commitment.objects.filter(
+            organisation=org,
+            status__in=active_statuses,
+        ).aggregate(
+            overdue=Count('id', filter=Q(deadline__lt=today)),
+            at_risk=Count('id', filter=Q(risk_score__gte=0.7, deadline__gte=today)),
+            on_track=Count('id', filter=Q(risk_score__lt=0.7)),
+            total_active=Count('id'),
+        )
+        return Response(summary)
