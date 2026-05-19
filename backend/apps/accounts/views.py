@@ -7,7 +7,8 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -49,7 +50,15 @@ def _issue_tokens(user):
 
 # ── Auth / onboarding views ───────────────────────────────────────────────────
 
-@extend_schema(tags=['auth'], summary='Register a new organisation and admin user')
+@extend_schema(
+    tags=['auth'],
+    summary='Register a new organisation and admin user',
+    request=RegisterSerializer,
+    responses={201: inline_serializer('TokenResponse', fields={
+        'access':  drf_serializers.CharField(),
+        'refresh': drf_serializers.CharField(),
+    })},
+)
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -84,7 +93,12 @@ class RegisterView(APIView):
         return Response({**_issue_tokens(user), 'is_first_login': True}, status=status.HTTP_201_CREATED)
 
 
-@extend_schema(tags=['auth'], summary='Send an email invite to join your organisation')
+@extend_schema(
+    tags=['auth'],
+    summary='Send an email invite to join your organisation',
+    request=InviteSerializer,
+    responses={200: inline_serializer('InviteResponse', fields={'detail': drf_serializers.CharField()})},
+)
 class InviteView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -118,7 +132,14 @@ class InviteView(APIView):
         return Response({'detail': 'Invite sent.'}, status=status.HTTP_201_CREATED)
 
 
-@extend_schema(tags=['auth'], summary='Validate an invite token (returns email + org name)')
+@extend_schema(
+    tags=['auth'],
+    summary='Validate an invite token (returns email + org name)',
+    responses={200: inline_serializer('ValidateInviteResponse', fields={
+        'email':    drf_serializers.CharField(),
+        'org_name': drf_serializers.CharField(),
+    })},
+)
 class ValidateInviteView(APIView):
     permission_classes = [AllowAny]
 
@@ -141,7 +162,15 @@ class ValidateInviteView(APIView):
         })
 
 
-@extend_schema(tags=['auth'], summary='Accept an invite and create your account')
+@extend_schema(
+    tags=['auth'],
+    summary='Accept an invite and create your account',
+    request=AcceptInviteSerializer,
+    responses={201: inline_serializer('AcceptInviteTokenResponse', fields={
+        'access':  drf_serializers.CharField(),
+        'refresh': drf_serializers.CharField(),
+    })},
+)
 class AcceptInviteView(APIView):
     permission_classes = [AllowAny]
 
@@ -301,6 +330,13 @@ class PersonViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.G
 @extend_schema(
     tags=['auth'],
     summary='List pending invitations for the org (admin only)',
+    responses={200: inline_serializer('InvitationListResponse', fields={
+        'id':           drf_serializers.UUIDField(),
+        'email':        drf_serializers.EmailField(),
+        'status':       drf_serializers.CharField(),
+        'expires_at':   drf_serializers.DateTimeField(),
+        'created_at':   drf_serializers.DateTimeField(),
+    }, many=True)},
 )
 class InvitationListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -340,7 +376,12 @@ class InvitationListView(APIView):
 _SETTINGS_KEYS = {'confidence_threshold', 'nudge_hours_before', 'digest_day', 'digest_hour'}
 
 
-@extend_schema(tags=['orgs'], summary='Update org settings (confidence threshold, nudge timing, digest schedule)')
+@extend_schema(
+    tags=['orgs'],
+    summary='Update org settings (confidence threshold, nudge timing, digest schedule)',
+    request=OrgSettingsSerializer,
+    responses={200: OrgSettingsSerializer},
+)
 class OrgSettingsView(APIView):
     permission_classes = [IsAuthenticated]
 
