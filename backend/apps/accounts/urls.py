@@ -11,7 +11,7 @@ from .views import (
     ValidateInviteView,
 )
 
-router = DefaultRouter(trailing_slash=False)
+router = DefaultRouter()
 router.register('persons', PersonViewSet, basename='person')
 
 urlpatterns = [
