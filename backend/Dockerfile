@@ -15,7 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY . .
 
-RUN python manage.py collectstatic --noinput --settings=config.settings.production
+RUN DJANGO_SECRET_KEY=build-placeholder \
+    ALLOWED_HOSTS=localhost \
+    CORS_ALLOWED_ORIGINS=http://localhost \
+    python manage.py collectstatic --noinput --settings=config.settings.production
 
 EXPOSE 8000
 
