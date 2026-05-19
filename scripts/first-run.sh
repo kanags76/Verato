@@ -5,16 +5,16 @@ set -e
 cd /opt/verato
 
 echo "=== Building and starting containers ==="
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 
 echo "=== Waiting for DB to be ready ==="
 sleep 10
 
 echo "=== Running migrations ==="
-docker compose -f docker-compose.prod.yml exec web python manage.py migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py migrate
 
 echo "=== Creating superuser ==="
-docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py createsuperuser
 
 echo "=== Getting SSL certificate ==="
 echo "Make sure api.verato.twocents.ai DNS A record points to this server's IP first!"
@@ -30,7 +30,7 @@ certbot certonly \
   --no-eff-email
 
 echo "=== Restarting nginx with SSL ==="
-docker compose -f docker-compose.prod.yml restart nginx
+docker compose --env-file .env.production -f docker-compose.prod.yml restart nginx
 
 echo ""
 echo "=== Done! API is live at https://api.verato.twocents.ai ==="

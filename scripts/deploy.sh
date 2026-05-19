@@ -8,9 +8,9 @@ echo "=== Pulling latest code ==="
 git pull origin main
 
 echo "=== Rebuilding and restarting containers ==="
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 
 echo "=== Running migrations ==="
-docker compose -f docker-compose.prod.yml exec web python manage.py migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py migrate
 
 echo "=== Deploy complete ==="
