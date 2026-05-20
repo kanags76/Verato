@@ -96,6 +96,6 @@ class CommitmentSerializer(serializers.ModelSerializer):
 
 
 class ResolveSerializer(serializers.Serializer):
-    outcome      = serializers.ChoiceField(choices=['delivered', 'deferred', 'cancelled'])
+    outcome      = serializers.ChoiceField(choices=['done', 'deferred', 'cancelled'])
     note         = serializers.CharField(required=False, allow_blank=True, default='')
     new_deadline = serializers.DateField(required=False, allow_null=True)

@@ -64,7 +64,7 @@ def compute_risk_score(commitment) -> float:
 def score_to_status(score: float, deadline, current_status: str) -> str:
     """Determine new status from risk score and deadline. Never closes a commitment."""
     today = date.today()
-    closed = {'delivered', 'deferred', 'cancelled'}
+    closed = {'done', 'deferred', 'cancelled'}
 
     if current_status in closed:
         return current_status

@@ -31,7 +31,7 @@ def _serialize_commitment(commitment):
         summary='List commitments',
         parameters=[
             OpenApiParameter('status', OpenApiTypes.STR,
-                description='Filter by status: pending_review | active | at_risk | escalated | delivered | deferred | cancelled'),
+                description='Filter by status: pending_review | active | at_risk | escalated | done | deferred | cancelled'),
             OpenApiParameter('owner', OpenApiTypes.UUID, description='Filter by owner person ID'),
             OpenApiParameter('source', OpenApiTypes.STR, description='Filter by source: transcript | import'),
             OpenApiParameter('tags__label', OpenApiTypes.STR, description='Filter by tag label'),
@@ -45,7 +45,7 @@ def _serialize_commitment(commitment):
     confirm=extend_schema(tags=['commitments'], summary='Confirm extraction: PENDING_REVIEW → ACTIVE'),
     reject=extend_schema(tags=['commitments'], summary='Reject extraction: discard + log feedback'),
     escalate=extend_schema(tags=['commitments'], summary='Manually escalate commitment'),
-    resolve=extend_schema(tags=['commitments'], summary='Resolve commitment: delivered | deferred | cancelled'),
+    resolve=extend_schema(tags=['commitments'], summary='Resolve commitment: done | deferred | cancelled'),
     bulk_confirm=extend_schema(
         tags=['commitments'],
         summary='Bulk confirm all pending commitments (optionally filter by min_confidence)',
@@ -228,7 +228,7 @@ class CommitmentViewSet(
         data = serializer.validated_data
 
         outcome_map = {
-            'delivered': Commitment.Status.DELIVERED,
+            'done':      Commitment.Status.DELIVERED,
             'deferred':  Commitment.Status.DEFERRED,
             'cancelled': Commitment.Status.CANCELLED,
         }

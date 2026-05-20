@@ -46,7 +46,7 @@ class Commitment(models.Model):
         ACTIVE         = 'active',         'Active'
         AT_RISK        = 'at_risk',        'At Risk'
         ESCALATED      = 'escalated',      'Escalated'
-        DELIVERED      = 'delivered',      'Delivered'
+        DELIVERED      = 'done',           'Done'
         DEFERRED       = 'deferred',       'Deferred'
         CANCELLED      = 'cancelled',      'Cancelled'
 
