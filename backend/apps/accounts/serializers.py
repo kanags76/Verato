@@ -80,6 +80,18 @@ class LinkSlackSerializer(serializers.Serializer):
     slack_user_id = serializers.CharField(max_length=64)
 
 
+class MergePersonsSerializer(serializers.Serializer):
+    primary_id     = serializers.UUIDField()
+    duplicate_ids  = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+
+    def validate(self, attrs):
+        primary_id    = attrs['primary_id']
+        duplicate_ids = attrs['duplicate_ids']
+        if str(primary_id) in [str(d) for d in duplicate_ids]:
+            raise serializers.ValidationError('primary_id must not appear in duplicate_ids.')
+        return attrs
+
+
 class OrgSettingsSerializer(serializers.Serializer):
     confidence_threshold = serializers.FloatField(required=False, min_value=0.0, max_value=1.0)
     nudge_hours_before   = serializers.IntegerField(required=False, min_value=1, max_value=168)

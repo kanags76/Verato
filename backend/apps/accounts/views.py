@@ -27,6 +27,7 @@ from .serializers import (
     EmailTokenObtainPairSerializer,
     InviteSerializer,
     LinkSlackSerializer,
+    MergePersonsSerializer,
     OrgSettingsSerializer,
     PersonSerializer,
     RegisterSerializer,
@@ -231,19 +232,89 @@ class AcceptInviteView(APIView):
 @extend_schema_view(
     list=extend_schema(tags=['persons'], summary='List org participants'),
     retrieve=extend_schema(tags=['persons'], summary='Person detail + delivery stats + lineage'),
+    partial_update=extend_schema(tags=['persons'], summary='Update person name, email, or role'),
     timeline=extend_schema(tags=['persons'], summary='Chronological meetings + commitments for a person'),
     topics=extend_schema(tags=['persons'], summary='Tag frequency list for a person'),
     link_slack=extend_schema(tags=['persons'], summary='Link a Slack user ID to this person'),
+    merge=extend_schema(
+        tags=['persons'],
+        summary='Merge duplicate persons into one — reassigns all commitments, meetings, and events',
+        request=MergePersonsSerializer,
+        responses={200: PersonSerializer},
+    ),
 )
-class PersonViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class PersonViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     serializer_class = PersonSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
     def get_queryset(self):
         org = get_user_org(self.request)
         if org is None:
             return Person.objects.none()
         return Person.objects.filter(organisation=org).order_by('name')
+
+    @action(detail=False, methods=['post'])
+    def merge(self, request):
+        org = get_user_org(request)
+        if org is None:
+            return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = MergePersonsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            primary = Person.objects.get(pk=data['primary_id'], organisation=org)
+        except Person.DoesNotExist:
+            return Response({'detail': 'primary_id not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        duplicates = list(Person.objects.filter(pk__in=data['duplicate_ids'], organisation=org))
+        if len(duplicates) != len(data['duplicate_ids']):
+            return Response({'detail': 'One or more duplicate_ids not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from django.db import transaction
+        from apps.meetings.models import MeetingParticipant
+        from apps.commitments.models import Commitment, EscalationEvent, ExtractionFeedback, CommitmentEvent
+
+        with transaction.atomic():
+            for dup in duplicates:
+                # Transfer User link if primary has none
+                if dup.user_id and not primary.user_id:
+                    primary.user = dup.user
+                    dup.user = None
+                    dup.save(update_fields=['user'])
+
+                # Reassign commitments
+                Commitment.objects.filter(owner=dup).update(owner=primary)
+                Commitment.objects.filter(reviewed_by=dup).update(reviewed_by=primary)
+
+                # Reassign escalation events
+                EscalationEvent.objects.filter(escalated_by=dup).update(escalated_by=primary)
+                EscalationEvent.objects.filter(escalated_to=dup).update(escalated_to=primary)
+
+                # Reassign extraction feedback and audit events
+                ExtractionFeedback.objects.filter(given_by=dup).update(given_by=primary)
+                CommitmentEvent.objects.filter(actor=dup).update(actor=primary)
+
+                # Reassign meeting participants — skip if primary already in that meeting
+                existing_meeting_ids = set(
+                    MeetingParticipant.objects.filter(person=primary).values_list('meeting_id', flat=True)
+                )
+                for mp in MeetingParticipant.objects.filter(person=dup):
+                    if mp.meeting_id in existing_meeting_ids:
+                        mp.delete()
+                    else:
+                        mp.person = primary
+                        mp.save(update_fields=['person'])
+
+                dup.delete()
+
+            # Recompute meeting_count
+            primary.meeting_count = MeetingParticipant.objects.filter(person=primary).count()
+            primary.save()
+
+        return Response(PersonSerializer(primary).data)
 
     @action(detail=True, methods=['post'], url_path='link-slack')
     def link_slack(self, request, pk=None):
