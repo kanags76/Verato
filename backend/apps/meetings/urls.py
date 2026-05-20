@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import MeetingViewSet, MeetingUploadView, MeetingImportView, MeetingStatusView
+from .views import MeetingViewSet, MeetingUploadView, MeetingImportView, MeetingStatusView, LinkParticipantsView
 
 router = DefaultRouter()
 router.register('meetings', MeetingViewSet, basename='meeting')
@@ -12,4 +12,5 @@ urlpatterns = [
     path('meetings/upload/', MeetingUploadView.as_view(),  name='meeting-upload'),
     path('meetings/import/', MeetingImportView.as_view(),  name='meeting-import'),
     path('meetings/<uuid:pk>/status/', MeetingStatusView.as_view(), name='meeting-status'),
+    path('meetings/<uuid:pk>/link-participants/', LinkParticipantsView.as_view(), name='meeting-link-participants'),
 ] + router.urls

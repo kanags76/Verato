@@ -69,6 +69,32 @@ class MeetingUploadSerializer(serializers.Serializer):
         return data
 
 
+class ParticipantMappingItemSerializer(serializers.Serializer):
+    detected_name = serializers.CharField(
+        help_text='Speaker name as detected in the transcript')
+    person_id     = serializers.UUIDField(required=False, allow_null=True,
+        help_text='Link to an existing Person in the org')
+    person        = serializers.DictField(required=False, allow_null=True,
+        help_text='Create a new Person: {name, email?, role?}')
+    skip          = serializers.BooleanField(required=False, default=False,
+        help_text='True to ignore this speaker (not tracked)')
+
+    def validate(self, attrs):
+        has_person_id = bool(attrs.get('person_id'))
+        has_person    = bool(attrs.get('person'))
+        skip          = attrs.get('skip', False)
+        if not skip and not has_person_id and not has_person:
+            raise serializers.ValidationError(
+                'Each entry must have person_id, person, or skip=true.')
+        if has_person_id and has_person:
+            raise serializers.ValidationError('Provide person_id OR person, not both.')
+        return attrs
+
+
+class LinkParticipantsSerializer(serializers.Serializer):
+    participants = ParticipantMappingItemSerializer(many=True, min_length=1)
+
+
 class MeetingImportSerializer(serializers.Serializer):
     title = serializers.CharField(
         max_length=500, required=False, default='Prior Commitments Import',

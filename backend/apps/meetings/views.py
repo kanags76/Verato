@@ -11,8 +11,10 @@ from .models import Meeting, MeetingParticipant
 from .serializers import (
     MeetingSerializer, MeetingStatusSerializer,
     MeetingUploadSerializer, MeetingImportSerializer,
+    LinkParticipantsSerializer,
 )
 from .parsers import extract_text_from_file
+from .speaker import scan_speakers, suggest_person_match
 from .tasks import process_meeting, process_import
 from apps.accounts.models import Person
 from apps.accounts.views import get_user_org
@@ -39,14 +41,14 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
 
 @extend_schema(
     tags=['meetings'],
-    summary='Upload meeting transcript',
+    summary='Upload meeting transcript — step 1 of 2',
     description=(
-        'Submit a transcript as text or file. Returns 202 immediately. '
-        'Gemini extraction runs asynchronously — poll /meetings/{id}/status/ until complete. '
-        'Requires Celery worker to be running.'
+        'Submit a transcript as text or file. Creates the meeting and scans for speaker names. '
+        'Returns the meeting ID and a list of detected speakers with suggested person matches. '
+        'Call POST /meetings/{id}/link-participants/ next to validate speakers and start extraction.'
     ),
     request=MeetingUploadSerializer,
-    responses={202: MeetingStatusSerializer},
+    responses={202: None},
 )
 class MeetingUploadView(APIView):
     permission_classes = [IsAuthenticated]
@@ -61,12 +63,10 @@ class MeetingUploadView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Extract transcript text
         transcript = data.get('transcript', '')
         if data.get('file'):
             transcript = extract_text_from_file(data['file'])
 
-        # Create meeting record
         meeting = Meeting.objects.create(
             organisation=org,
             title=data['title'],
@@ -74,27 +74,93 @@ class MeetingUploadView(APIView):
             platform=Meeting.Platform.UPLOAD,
             raw_transcript=transcript,
             word_count=len(transcript.split()),
-            processing_status=Meeting.ProcessingStatus.PENDING,
+            processing_status=Meeting.ProcessingStatus.PENDING_PARTICIPANTS,
         )
 
-        # Resolve participant names → Person records → MeetingParticipant rows
-        participant_names = [
-            n.strip() for n in data.get('participants', '').split(',') if n.strip()
-        ]
-        for name in participant_names:
-            person, _ = Person.objects.get_or_create(
-                organisation=org, name=name,
-                defaults={'email': ''},
-            )
+        # Scan transcript for speaker names and suggest existing person matches
+        detected = scan_speakers(transcript)
+        speakers = []
+        for name in detected:
+            match = suggest_person_match(org, name)
+            speakers.append({
+                'detected_name':    name,
+                'suggested_match':  {'id': str(match.id), 'name': match.name} if match else None,
+            })
+
+        return Response({
+            'meeting_id': str(meeting.id),
+            'status':     meeting.processing_status,
+            'speakers':   speakers,
+        }, status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(
+    tags=['meetings'],
+    summary='Validate participants — step 2 of 2',
+    description=(
+        'For each speaker detected in the transcript, link to an existing person, '
+        'create a new person, or skip. Once submitted, Gemini extraction starts immediately. '
+        'Poll /meetings/{id}/status/ until complete.'
+    ),
+    request=LinkParticipantsSerializer,
+    responses={202: None},
+)
+class LinkParticipantsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        org = get_user_org(request)
+        if org is None:
+            return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        meeting = get_object_or_404(
+            Meeting, id=pk, organisation=org,
+            processing_status=Meeting.ProcessingStatus.PENDING_PARTICIPANTS,
+        )
+
+        serializer = LinkParticipantsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entries = serializer.validated_data['participants']
+
+        for entry in entries:
+            if entry.get('skip'):
+                continue
+
+            if entry.get('person_id'):
+                try:
+                    person = Person.objects.get(pk=entry['person_id'], organisation=org)
+                except Person.DoesNotExist:
+                    return Response(
+                        {'detail': f"person_id {entry['person_id']} not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                new_data = entry['person']
+                if not new_data.get('name'):
+                    return Response(
+                        {'detail': 'person.name is required when creating a new person.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                person, _ = Person.objects.get_or_create(
+                    organisation=org,
+                    name=new_data['name'],
+                    defaults={
+                        'email': new_data.get('email', ''),
+                        'role':  new_data.get('role', ''),
+                    },
+                )
+
             MeetingParticipant.objects.get_or_create(meeting=meeting, person=person)
 
-        # Queue extraction task
+        meeting.processing_status = Meeting.ProcessingStatus.PENDING
+        meeting.save(update_fields=['processing_status'])
         process_meeting.delay(str(meeting.id))
 
-        return Response(
-            {'meeting_id': str(meeting.id), 'status': meeting.processing_status},
-            status=status.HTTP_202_ACCEPTED,
-        )
+        return Response({
+            'meeting_id':          str(meeting.id),
+            'status':              meeting.processing_status,
+            'participant_count':   MeetingParticipant.objects.filter(meeting=meeting).count(),
+        }, status=status.HTTP_202_ACCEPTED)
 
 
 @extend_schema(
@@ -158,10 +224,33 @@ class MeetingStatusView(APIView):
             return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
 
         meeting = get_object_or_404(Meeting, id=pk, organisation=org)
-        return Response({
-            'meeting_id':       str(meeting.id),
-            'status':           meeting.processing_status,
-            'processed_at':     meeting.processed_at,
-            'processing_error': meeting.processing_error or None,
-            'commitment_count': meeting.commitments.count(),
-        })
+
+        resp = {
+            'meeting_id':          str(meeting.id),
+            'status':              meeting.processing_status,
+            'processed_at':        meeting.processed_at,
+            'processing_error':    meeting.processing_error or None,
+            'commitment_count':    meeting.commitments.count(),
+            'participant_count':   MeetingParticipant.objects.filter(meeting=meeting).count(),
+        }
+
+        # If still awaiting participant validation, re-surface the speaker scan
+        if meeting.processing_status == Meeting.ProcessingStatus.PENDING_PARTICIPANTS:
+            detected = scan_speakers(meeting.raw_transcript)
+            linked_names = set(
+                MeetingParticipant.objects
+                .filter(meeting=meeting)
+                .values_list('person__name', flat=True)
+            )
+            resp['speakers'] = [
+                {
+                    'detected_name':   name,
+                    'linked':          name in linked_names,
+                    'suggested_match': (
+                        lambda m: {'id': str(m.id), 'name': m.name} if m else None
+                    )(suggest_person_match(org, name)),
+                }
+                for name in detected
+            ]
+
+        return Response(resp)

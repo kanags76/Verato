@@ -18,10 +18,11 @@ class Meeting(models.Model):
         IMPORT = 'import', 'Prior Commitments Import'
 
     class ProcessingStatus(models.TextChoices):
-        PENDING    = 'pending',    'Pending'
-        PROCESSING = 'processing', 'Processing'
-        COMPLETE   = 'complete',   'Complete'
-        FAILED     = 'failed',     'Failed'
+        PENDING_PARTICIPANTS = 'pending_participants', 'Awaiting Participant Validation'
+        PENDING              = 'pending',              'Pending'
+        PROCESSING           = 'processing',           'Processing'
+        COMPLETE             = 'complete',             'Complete'
+        FAILED               = 'failed',               'Failed'
 
     class MeetingType(models.TextChoices):
         LEADERSHIP = 'leadership', 'Leadership / Exec'
