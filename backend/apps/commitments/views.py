@@ -51,6 +51,7 @@ def _serialize_commitment(commitment):
         summary='Bulk confirm all pending commitments (optionally filter by min_confidence)',
     ),
     nudge=extend_schema(tags=['commitments'], summary='Send a Slack deadline nudge to the commitment owner'),
+    reopen=extend_schema(tags=['commitments'], summary='Reopen a closed commitment → ACTIVE'),
 )
 class CommitmentViewSet(
     mixins.ListModelMixin,
@@ -243,6 +244,24 @@ class CommitmentViewSet(
             update_fields.append('deadline')
 
         commitment.save(update_fields=update_fields)
+        return Response(_serialize_commitment(commitment))
+
+    @action(detail=True, methods=['post'])
+    def reopen(self, request, pk=None):
+        commitment = self.get_object()
+        reopenable = {
+            Commitment.Status.DELIVERED,
+            Commitment.Status.CANCELLED,
+            Commitment.Status.DEFERRED,
+        }
+        if commitment.status not in reopenable:
+            return Response(
+                {'detail': f'Cannot reopen a commitment with status {commitment.status!r}.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        commitment.status      = Commitment.Status.ACTIVE
+        commitment.resolved_at = None
+        commitment.save(update_fields=['status', 'resolved_at', 'updated_at'])
         return Response(_serialize_commitment(commitment))
 
 
