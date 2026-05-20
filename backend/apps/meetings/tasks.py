@@ -118,6 +118,19 @@ def process_meeting(self, meeting_id: str):
         # Persist graph metadata
         _save_topics(meeting, org, result["topics"])
 
+        # Store Gemini-detected participants as unconfirmed MeetingParticipant rows
+        for speaker_name in result.get("participants", []):
+            person = _resolve_person(org, speaker_name)
+            if person:
+                MeetingParticipant.objects.get_or_create(
+                    meeting=meeting,
+                    person=person,
+                    defaults={
+                        'speaker_label': speaker_name,
+                        'confirmed': False,
+                    },
+                )
+
         meeting.meeting_type = result["meeting_type"]
         meeting.summary = result["summary"]
         meeting.processing_status = Meeting.ProcessingStatus.COMPLETE

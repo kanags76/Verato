@@ -14,7 +14,6 @@ from .serializers import (
     LinkParticipantsSerializer,
 )
 from .parsers import extract_text_from_file
-from .speaker import scan_speakers, suggest_person_match
 from .tasks import process_meeting, process_import
 from apps.accounts.models import Person
 from apps.accounts.views import get_user_org
@@ -23,6 +22,10 @@ from apps.accounts.views import get_user_org
 @extend_schema_view(
     list=extend_schema(tags=['meetings'], summary='List org meetings'),
     retrieve=extend_schema(tags=['meetings'], summary='Meeting detail'),
+    participants=extend_schema(
+        tags=['meetings'],
+        summary='List detected participants — confirmed and unconfirmed',
+    ),
 )
 class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     serializer_class = MeetingSerializer
@@ -38,17 +41,43 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             .order_by('-occurred_at')
         )
 
+    @action(detail=True, methods=['get'])
+    def participants(self, request, pk=None):
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+        rows = (
+            MeetingParticipant.objects
+            .filter(meeting=meeting)
+            .select_related('person')
+            .order_by('person__name')
+        )
+        return Response([
+            {
+                'person': {
+                    'id':    str(row.person.id),
+                    'name':  row.person.name,
+                    'email': row.person.email,
+                    'role':  row.person.role,
+                },
+                'speaker_label': row.speaker_label or row.person.name,
+                'confirmed':     row.confirmed,
+            }
+            for row in rows
+        ])
+
 
 @extend_schema(
     tags=['meetings'],
-    summary='Upload meeting transcript — step 1 of 2',
+    summary='Upload meeting transcript',
     description=(
-        'Submit a transcript as text or file. Creates the meeting and scans for speaker names. '
-        'Returns the meeting ID and a list of detected speakers with suggested person matches. '
-        'Call POST /meetings/{id}/link-participants/ next to validate speakers and start extraction.'
+        'Submit a transcript as text or file. Returns 202 immediately. '
+        'Gemini extracts commitments and participants asynchronously — '
+        'poll /meetings/{id}/status/ until complete, then review both '
+        'GET /meetings/{id}/participants/ and GET /commitments/?meeting={id}&status=pending_review '
+        'in any order.'
     ),
     request=MeetingUploadSerializer,
-    responses={202: None},
+    responses={202: MeetingStatusSerializer},
 )
 class MeetingUploadView(APIView):
     permission_classes = [IsAuthenticated]
@@ -74,36 +103,27 @@ class MeetingUploadView(APIView):
             platform=Meeting.Platform.UPLOAD,
             raw_transcript=transcript,
             word_count=len(transcript.split()),
-            processing_status=Meeting.ProcessingStatus.PENDING_PARTICIPANTS,
+            processing_status=Meeting.ProcessingStatus.PENDING,
         )
 
-        # Scan transcript for speaker names and suggest existing person matches
-        detected = scan_speakers(transcript)
-        speakers = []
-        for name in detected:
-            match = suggest_person_match(org, name)
-            speakers.append({
-                'detected_name':    name,
-                'suggested_match':  {'id': str(match.id), 'name': match.name} if match else None,
-            })
+        process_meeting.delay(str(meeting.id))
 
-        return Response({
-            'meeting_id': str(meeting.id),
-            'status':     meeting.processing_status,
-            'speakers':   speakers,
-        }, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {'meeting_id': str(meeting.id), 'status': meeting.processing_status},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 @extend_schema(
     tags=['meetings'],
-    summary='Validate participants — step 2 of 2',
+    summary='Validate meeting participants',
     description=(
-        'For each speaker detected in the transcript, link to an existing person, '
-        'create a new person, or skip. Once submitted, Gemini extraction starts immediately. '
-        'Poll /meetings/{id}/status/ until complete.'
+        'After Gemini extraction completes, confirm detected participants, re-link to the correct '
+        'person, add new people, or skip. Can be called in any order relative to commitment review. '
+        'Each confirmed entry sets confirmed=True on the MeetingParticipant row.'
     ),
     request=LinkParticipantsSerializer,
-    responses={202: None},
+    responses={200: None},
 )
 class LinkParticipantsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -113,10 +133,7 @@ class LinkParticipantsView(APIView):
         if org is None:
             return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
 
-        meeting = get_object_or_404(
-            Meeting, id=pk, organisation=org,
-            processing_status=Meeting.ProcessingStatus.PENDING_PARTICIPANTS,
-        )
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
 
         serializer = LinkParticipantsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -124,6 +141,11 @@ class LinkParticipantsView(APIView):
 
         for entry in entries:
             if entry.get('skip'):
+                # Remove from meeting if previously auto-linked
+                if entry.get('person_id'):
+                    MeetingParticipant.objects.filter(
+                        meeting=meeting, person_id=entry['person_id']
+                    ).delete()
                 continue
 
             if entry.get('person_id'):
@@ -150,17 +172,19 @@ class LinkParticipantsView(APIView):
                     },
                 )
 
-            MeetingParticipant.objects.get_or_create(meeting=meeting, person=person)
-
-        meeting.processing_status = Meeting.ProcessingStatus.PENDING
-        meeting.save(update_fields=['processing_status'])
-        process_meeting.delay(str(meeting.id))
+            mp, _ = MeetingParticipant.objects.get_or_create(
+                meeting=meeting, person=person,
+                defaults={'speaker_label': entry.get('detected_name', ''), 'confirmed': True},
+            )
+            if not mp.confirmed:
+                mp.confirmed = True
+                mp.save(update_fields=['confirmed'])
 
         return Response({
-            'meeting_id':          str(meeting.id),
-            'status':              meeting.processing_status,
-            'participant_count':   MeetingParticipant.objects.filter(meeting=meeting).count(),
-        }, status=status.HTTP_202_ACCEPTED)
+            'meeting_id':        str(meeting.id),
+            'participant_count': MeetingParticipant.objects.filter(meeting=meeting).count(),
+            'confirmed_count':   MeetingParticipant.objects.filter(meeting=meeting, confirmed=True).count(),
+        })
 
 
 @extend_schema(
@@ -225,32 +249,12 @@ class MeetingStatusView(APIView):
 
         meeting = get_object_or_404(Meeting, id=pk, organisation=org)
 
-        resp = {
-            'meeting_id':          str(meeting.id),
-            'status':              meeting.processing_status,
-            'processed_at':        meeting.processed_at,
-            'processing_error':    meeting.processing_error or None,
-            'commitment_count':    meeting.commitments.count(),
-            'participant_count':   MeetingParticipant.objects.filter(meeting=meeting).count(),
-        }
-
-        # If still awaiting participant validation, re-surface the speaker scan
-        if meeting.processing_status == Meeting.ProcessingStatus.PENDING_PARTICIPANTS:
-            detected = scan_speakers(meeting.raw_transcript)
-            linked_names = set(
-                MeetingParticipant.objects
-                .filter(meeting=meeting)
-                .values_list('person__name', flat=True)
-            )
-            resp['speakers'] = [
-                {
-                    'detected_name':   name,
-                    'linked':          name in linked_names,
-                    'suggested_match': (
-                        lambda m: {'id': str(m.id), 'name': m.name} if m else None
-                    )(suggest_person_match(org, name)),
-                }
-                for name in detected
-            ]
-
-        return Response(resp)
+        return Response({
+            'meeting_id':        str(meeting.id),
+            'status':            meeting.processing_status,
+            'processed_at':      meeting.processed_at,
+            'processing_error':  meeting.processing_error or None,
+            'commitment_count':  meeting.commitments.count(),
+            'participant_count': MeetingParticipant.objects.filter(meeting=meeting).count(),
+            'confirmed_count':   MeetingParticipant.objects.filter(meeting=meeting, confirmed=True).count(),
+        })

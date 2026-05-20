@@ -61,6 +61,10 @@ Return a single JSON object with exactly these top-level keys:
 
 "meeting_summary" — 2-3 sentence plain English summary of the meeting's key discussion and decisions
 
+"participants" — array of strings: the full name of every person who spoke in the transcript,
+  in order of first appearance. Include everyone, even if they made no commitments.
+  Match to the provided participant list where possible; otherwise use the name as it appears.
+
 Return ONLY valid JSON. No markdown fences. No explanation. No trailing text.
 If no commitments are found, return an empty "commitments" array but still populate topics, type, and summary.
 

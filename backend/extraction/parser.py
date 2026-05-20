@@ -120,6 +120,7 @@ def parse_extraction_response(text: str) -> dict:
     """
     _empty = {
         "commitments": [], "topics": [], "meeting_type": "other", "summary": "",
+        "participants": [],
     }
 
     if not text or not text.strip():
@@ -136,10 +137,11 @@ def parse_extraction_response(text: str) -> dict:
     # Backward compat: bare array → treat as commitments, empty graph metadata
     if isinstance(data, list):
         return {
-            "commitments": _apply_commitment_defaults(data),
-            "topics":       [],
-            "meeting_type": "other",
-            "summary":      "",
+            "commitments":  _apply_commitment_defaults(data),
+            "topics":        [],
+            "meeting_type":  "other",
+            "summary":       "",
+            "participants":  [],
         }
 
     if not isinstance(data, dict):
@@ -176,9 +178,15 @@ def parse_extraction_response(text: str) -> dict:
 
     summary = data.get("meeting_summary", "") or ""
 
+    raw_participants = data.get("participants", [])
+    participants = []
+    if isinstance(raw_participants, list):
+        participants = [str(p).strip() for p in raw_participants if p and str(p).strip()]
+
     return {
-        "commitments": _apply_commitment_defaults(raw_commitments),
-        "topics":      topics,
-        "meeting_type": meeting_type,
-        "summary":     str(summary),
+        "commitments":  _apply_commitment_defaults(raw_commitments),
+        "topics":        topics,
+        "meeting_type":  meeting_type,
+        "summary":       str(summary),
+        "participants":  participants,
     }
