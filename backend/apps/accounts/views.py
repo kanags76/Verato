@@ -14,6 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.commitments.models import Commitment
@@ -49,6 +50,26 @@ def _issue_tokens(user):
 
 
 # ── Auth / onboarding views ───────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['auth'],
+    summary='Logout — blacklist the refresh token',
+    request=inline_serializer('LogoutRequest', fields={'refresh': drf_serializers.CharField()}),
+    responses={204: None},
+)
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({'detail': 'refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            RefreshToken(refresh_token).blacklist()
+        except TokenError:
+            return Response({'detail': 'Token is invalid or already blacklisted.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 @extend_schema(
     tags=['auth'],

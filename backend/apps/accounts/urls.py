@@ -5,6 +5,7 @@ from .views import (
     AcceptInviteView,
     InvitationListView,
     InviteView,
+    LogoutView,
     OrgSettingsView,
     PersonViewSet,
     RegisterView,
@@ -15,6 +16,7 @@ router = DefaultRouter()
 router.register('persons', PersonViewSet, basename='person')
 
 urlpatterns = [
+    path('auth/logout/',          LogoutView.as_view(),         name='logout'),
     path('auth/register/',        RegisterView.as_view(),      name='register'),
     path('auth/invite/',          InviteView.as_view(),         name='invite'),
     path('auth/invite/validate/', ValidateInviteView.as_view(), name='validate-invite'),
