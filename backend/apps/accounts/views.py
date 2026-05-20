@@ -231,6 +231,7 @@ class AcceptInviteView(APIView):
 
 @extend_schema_view(
     list=extend_schema(tags=['persons'], summary='List org participants'),
+    create=extend_schema(tags=['persons'], summary='Add a new person to the org'),
     retrieve=extend_schema(tags=['persons'], summary='Person detail + delivery stats + lineage'),
     partial_update=extend_schema(tags=['persons'], summary='Update person name, email, or role'),
     timeline=extend_schema(tags=['persons'], summary='Chronological meetings + commitments for a person'),
@@ -243,7 +244,7 @@ class AcceptInviteView(APIView):
         responses={200: PersonSerializer},
     ),
 )
-class PersonViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+class PersonViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     serializer_class = PersonSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
@@ -253,6 +254,13 @@ class PersonViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upd
         if org is None:
             return Person.objects.none()
         return Person.objects.filter(organisation=org).order_by('name')
+
+    def perform_create(self, serializer):
+        org = get_user_org(self.request)
+        if org is None:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('User has no organisation.')
+        serializer.save(organisation=org)
 
     @action(detail=False, methods=['post'])
     def merge(self, request):
