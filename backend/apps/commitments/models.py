@@ -153,6 +153,39 @@ class EscalationEvent(models.Model):
         ordering = ['-occurred_at']
 
 
+class CommitmentEvent(models.Model):
+    """
+    Append-only audit log. One row per meaningful change to a commitment.
+    Populated by every action in CommitmentViewSet (confirm, reject, resolve,
+    reopen, escalate, nudge, PATCH). Never updated, never deleted.
+    """
+
+    class EventType(models.TextChoices):
+        CONFIRMED    = 'confirmed',    'Confirmed'
+        REJECTED     = 'rejected',     'Rejected'
+        RESOLVED     = 'resolved',     'Resolved'
+        REOPENED     = 'reopened',     'Reopened'
+        ESCALATED    = 'escalated',    'Escalated'
+        NUDGED       = 'nudged',       'Nudge sent'
+        FIELD_EDITED = 'field_edited', 'Fields edited'
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    commitment  = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='events')
+    event_type  = models.CharField(max_length=30, choices=EventType.choices)
+    actor       = models.ForeignKey(
+        Person, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='commitment_events',
+    )
+    old_value   = models.JSONField(null=True, blank=True)
+    new_value   = models.JSONField(null=True, blank=True)
+    note        = models.TextField(blank=True)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'commitments_commitmentevent'
+        ordering = ['-occurred_at']
+
+
 class ExtractionFeedback(models.Model):
     """
     Every CoS confirm/reject stored as an immutable signal.

@@ -9,8 +9,8 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from .models import Commitment, CommitmentTag, EscalationEvent, ExtractionFeedback
-from .serializers import CommitmentSerializer, ResolveSerializer
+from .models import Commitment, CommitmentEvent, CommitmentTag, EscalationEvent, ExtractionFeedback
+from .serializers import CommitmentSerializer, CommitmentEventSerializer, ResolveSerializer
 from apps.accounts.views import get_user_org
 
 
@@ -23,6 +23,22 @@ def _serialize_commitment(commitment):
         .get(pk=commitment.pk)
     )
     return CommitmentSerializer(fresh).data
+
+
+def _get_actor(request):
+    """Return the Person linked to the logged-in user, or None."""
+    return getattr(request.user, 'person', None)
+
+
+def _log(commitment, event_type, actor, old_value=None, new_value=None, note=''):
+    CommitmentEvent.objects.create(
+        commitment=commitment,
+        event_type=event_type,
+        actor=actor,
+        old_value=old_value,
+        new_value=new_value,
+        note=note,
+    )
 
 
 @extend_schema_view(
@@ -93,6 +109,37 @@ class CommitmentViewSet(
 
         return qs
 
+    def partial_update(self, request, *args, **kwargs):
+        commitment = self.get_object()
+        actor = _get_actor(request)
+
+        old_vals = {
+            'normalised_text': commitment.normalised_text,
+            'priority':        commitment.priority,
+            'owner':           commitment.owner.name if commitment.owner else None,
+            'deadline':        str(commitment.deadline) if commitment.deadline else None,
+            'tags':            list(commitment.tags.values_list('label', flat=True)),
+        }
+
+        response = super().partial_update(request, *args, **kwargs)
+
+        commitment.refresh_from_db()
+        new_vals = {
+            'normalised_text': commitment.normalised_text,
+            'priority':        commitment.priority,
+            'owner':           commitment.owner.name if commitment.owner else None,
+            'deadline':        str(commitment.deadline) if commitment.deadline else None,
+            'tags':            list(commitment.tags.values_list('label', flat=True)),
+        }
+
+        changed_old = {k: old_vals[k] for k in old_vals if old_vals[k] != new_vals[k]}
+        changed_new = {k: new_vals[k] for k in changed_old}
+        if changed_old:
+            _log(commitment, CommitmentEvent.EventType.FIELD_EDITED, actor,
+                 old_value=changed_old, new_value=changed_new)
+
+        return response
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         commitment = self.get_object()
@@ -111,6 +158,8 @@ class CommitmentViewSet(
             feedback_type=ExtractionFeedback.FeedbackType.CONFIRMED,
             from_import=(commitment.source == Commitment.Source.IMPORT),
         )
+        _log(commitment, CommitmentEvent.EventType.CONFIRMED, _get_actor(request),
+             new_value={'status': 'active'})
         return Response(_serialize_commitment(commitment))
 
     @action(detail=True, methods=['post'])
@@ -130,6 +179,9 @@ class CommitmentViewSet(
         )
         commitment.status = Commitment.Status.CANCELLED
         commitment.save(update_fields=['status', 'updated_at'])
+        _log(commitment, CommitmentEvent.EventType.REJECTED, _get_actor(request),
+             new_value={'status': 'cancelled'},
+             note=request.data.get('note', ''))
         return Response(_serialize_commitment(commitment))
 
     @action(detail=True, methods=['post'])
@@ -149,6 +201,9 @@ class CommitmentViewSet(
             method=EscalationEvent.Method.MANUAL,
             message_sent=request.data.get('message', ''),
         )
+        _log(commitment, CommitmentEvent.EventType.ESCALATED, _get_actor(request),
+             new_value={'status': 'escalated'},
+             note=request.data.get('message', ''))
         return Response(_serialize_commitment(commitment))
 
     @action(detail=False, methods=['post'], url_path='bulk-confirm')
@@ -209,6 +264,8 @@ class CommitmentViewSet(
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        _log(commitment, CommitmentEvent.EventType.NUDGED, _get_actor(request),
+             note=f'Slack nudge sent to {commitment.owner.name}')
         return Response({'detail': 'Nudge sent.', 'channel': channel})
 
     @action(detail=True, methods=['post'])
@@ -245,6 +302,12 @@ class CommitmentViewSet(
             update_fields.append('deadline')
 
         commitment.save(update_fields=update_fields)
+        _log(commitment, CommitmentEvent.EventType.RESOLVED, _get_actor(request),
+             new_value={
+                 'status':   commitment.status,
+                 'deadline': str(new_deadline) if new_deadline else None,
+             },
+             note=data.get('note', ''))
         return Response(_serialize_commitment(commitment))
 
     @action(detail=True, methods=['post'])
@@ -263,6 +326,8 @@ class CommitmentViewSet(
         commitment.status      = Commitment.Status.ACTIVE
         commitment.resolved_at = None
         commitment.save(update_fields=['status', 'resolved_at', 'updated_at'])
+        _log(commitment, CommitmentEvent.EventType.REOPENED, _get_actor(request),
+             new_value={'status': 'active'})
         return Response(_serialize_commitment(commitment))
 
     @action(detail=True, methods=['get'])
@@ -271,28 +336,30 @@ class CommitmentViewSet(
 
         events = []
 
-        # Extraction feedback (confirmed / rejected / wrong_owner / wrong_date)
-        for fb in commitment.feedback.select_related('given_by').order_by('created_at'):
+        # Primary audit log
+        for ev in commitment.events.select_related('actor').order_by('occurred_at'):
             events.append({
-                'type':       'feedback',
-                'event_type': fb.feedback_type,
-                'label':      fb.get_feedback_type_display(),
-                'note':       fb.note,
-                'actor':      fb.given_by.name if fb.given_by else None,
-                'occurred_at': fb.created_at,
+                'type':        'event',
+                'event_type':  ev.event_type,
+                'label':       ev.get_event_type_display(),
+                'actor':       ev.actor.name if ev.actor else None,
+                'old_value':   ev.old_value,
+                'new_value':   ev.new_value,
+                'note':        ev.note,
+                'occurred_at': ev.occurred_at,
             })
 
-        # Escalation events (slack / email / manual / auto)
+        # Escalation events — include for detail (message text, outcome, target person)
         for esc in commitment.escalations.select_related('escalated_by', 'escalated_to').order_by('occurred_at'):
             events.append({
-                'type':         'escalation',
-                'event_type':   esc.method,
-                'label':        f'Escalated via {esc.get_method_display()}',
-                'message':      esc.message_sent,
-                'outcome':      esc.outcome,
-                'actor':        esc.escalated_by.name if esc.escalated_by else None,
-                'target':       esc.escalated_to.name if esc.escalated_to else None,
-                'occurred_at':  esc.occurred_at,
+                'type':        'escalation',
+                'event_type':  esc.method,
+                'label':       f'Escalated via {esc.get_method_display()}',
+                'actor':       esc.escalated_by.name if esc.escalated_by else None,
+                'target':      esc.escalated_to.name if esc.escalated_to else None,
+                'message':     esc.message_sent,
+                'outcome':     esc.outcome,
+                'occurred_at': esc.occurred_at,
             })
 
         events.sort(key=lambda e: e['occurred_at'], reverse=True)

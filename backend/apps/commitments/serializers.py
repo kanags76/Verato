@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Commitment, CommitmentTag, EscalationEvent, ExtractionFeedback
+from .models import Commitment, CommitmentTag, CommitmentEvent, EscalationEvent, ExtractionFeedback
 
 
 class TagsField(serializers.Field):
@@ -69,7 +69,8 @@ class CommitmentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'risk_score', 'status', 'reviewed_at',
+            'id', 'raw_text', 'commit_type', 'confidence',
+            'risk_score', 'status', 'reviewed_at',
             'resolved_at', 'created_at', 'updated_at', 'escalations',
         ]
 
@@ -93,6 +94,18 @@ class CommitmentSerializer(serializers.ModelSerializer):
             ]
             instance.tags.set(tag_objs)
         return instance
+
+
+class CommitmentEventSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CommitmentEvent
+        fields = ['id', 'event_type', 'actor_name', 'old_value', 'new_value', 'note', 'occurred_at']
+        read_only_fields = fields
+
+    def get_actor_name(self, obj):
+        return obj.actor.name if obj.actor else None
 
 
 class ResolveSerializer(serializers.Serializer):
