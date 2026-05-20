@@ -52,6 +52,7 @@ def _serialize_commitment(commitment):
     ),
     nudge=extend_schema(tags=['commitments'], summary='Send a Slack deadline nudge to the commitment owner'),
     reopen=extend_schema(tags=['commitments'], summary='Reopen a closed commitment → ACTIVE'),
+    history=extend_schema(tags=['commitments'], summary='Unified audit timeline: escalations + feedback events, newest first'),
 )
 class CommitmentViewSet(
     mixins.ListModelMixin,
@@ -263,6 +264,39 @@ class CommitmentViewSet(
         commitment.resolved_at = None
         commitment.save(update_fields=['status', 'resolved_at', 'updated_at'])
         return Response(_serialize_commitment(commitment))
+
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        commitment = self.get_object()
+
+        events = []
+
+        # Extraction feedback (confirmed / rejected / wrong_owner / wrong_date)
+        for fb in commitment.feedback.select_related('given_by').order_by('created_at'):
+            events.append({
+                'type':       'feedback',
+                'event_type': fb.feedback_type,
+                'label':      fb.get_feedback_type_display(),
+                'note':       fb.note,
+                'actor':      fb.given_by.name if fb.given_by else None,
+                'occurred_at': fb.created_at,
+            })
+
+        # Escalation events (slack / email / manual / auto)
+        for esc in commitment.escalations.select_related('escalated_by', 'escalated_to').order_by('occurred_at'):
+            events.append({
+                'type':         'escalation',
+                'event_type':   esc.method,
+                'label':        f'Escalated via {esc.get_method_display()}',
+                'message':      esc.message_sent,
+                'outcome':      esc.outcome,
+                'actor':        esc.escalated_by.name if esc.escalated_by else None,
+                'target':       esc.escalated_to.name if esc.escalated_to else None,
+                'occurred_at':  esc.occurred_at,
+            })
+
+        events.sort(key=lambda e: e['occurred_at'], reverse=True)
+        return Response(events)
 
 
 # ── Tag autocomplete ──────────────────────────────────────────────────────────
