@@ -1,4 +1,4 @@
-from rest_framework import viewsets, mixins, status
+from rest_framework import viewsets, mixins, serializers as drf_serializers, status
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -22,12 +22,21 @@ from apps.accounts.views import get_user_org
 @extend_schema_view(
     list=extend_schema(tags=['meetings'], summary='List org meetings'),
     retrieve=extend_schema(tags=['meetings'], summary='Meeting detail'),
-    participants=extend_schema(
+    partial_update=extend_schema(tags=['meetings'], summary='Update meeting title, date, type, or summary'),
+    participants=extend_schema(tags=['meetings'], summary='List participants — confirmed and unconfirmed'),
+    add_participant=extend_schema(
         tags=['meetings'],
-        summary='List detected participants — confirmed and unconfirmed',
+        summary='Add a person to a meeting',
+        request=drf_serializers.Serializer,
+    ),
+    remove_participant=extend_schema(
+        tags=['meetings'],
+        summary='Remove a person from a meeting',
+        request=drf_serializers.Serializer,
     ),
 )
-class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    http_method_names = ['get', 'patch', 'post', 'head', 'options']
     serializer_class = MeetingSerializer
     permission_classes = [IsAuthenticated]
 
@@ -64,6 +73,68 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             }
             for row in rows
         ])
+
+    @action(detail=True, methods=['post'], url_path='add-participant')
+    def add_participant(self, request, pk=None):
+        """Add a person to this meeting. Pass person_id for existing or person{} to create new."""
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+
+        person_id = request.data.get('person_id')
+        person_data = request.data.get('person')
+
+        if person_id:
+            try:
+                person = Person.objects.get(pk=person_id, organisation=org)
+            except Person.DoesNotExist:
+                return Response({'detail': 'person_id not found.'}, status=status.HTTP_404_NOT_FOUND)
+        elif person_data:
+            if not person_data.get('name'):
+                return Response({'detail': 'person.name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            person, _ = Person.objects.get_or_create(
+                organisation=org,
+                name=person_data['name'],
+                defaults={
+                    'email': person_data.get('email', ''),
+                    'role':  person_data.get('role', ''),
+                },
+            )
+        else:
+            return Response({'detail': 'Provide person_id or person.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        mp, created = MeetingParticipant.objects.get_or_create(
+            meeting=meeting,
+            person=person,
+            defaults={'confirmed': True},
+        )
+        if not created and not mp.confirmed:
+            mp.confirmed = True
+            mp.save(update_fields=['confirmed'])
+
+        return Response({
+            'person':    {'id': str(person.id), 'name': person.name, 'role': person.role},
+            'confirmed': mp.confirmed,
+            'created':   created,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='remove-participant')
+    def remove_participant(self, request, pk=None):
+        """Remove a person from this meeting by person_id."""
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+
+        person_id = request.data.get('person_id')
+        if not person_id:
+            return Response({'detail': 'person_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        deleted, _ = MeetingParticipant.objects.filter(
+            meeting=meeting, person_id=person_id
+        ).delete()
+
+        if not deleted:
+            return Response({'detail': 'Person is not a participant of this meeting.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(

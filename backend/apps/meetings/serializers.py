@@ -25,8 +25,7 @@ class MeetingSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'processing_status', 'processed_at',
             'processing_error', 'word_count', 'created_at',
-            'meeting_type', 'summary', 'topics',
-            'commitment_count', 'pending_count',
+            'topics', 'commitment_count', 'pending_count',
         ]
 
     def get_commitment_count(self, obj):
