@@ -8,7 +8,7 @@ from django.urls import path
 from django.utils.html import format_html
 from django.utils.timezone import now
 
-from .models import Meeting, MeetingParticipant, MeetingTopic
+from .models import Meeting, MeetingParticipant, MeetingTopic, PipelineStatus
 
 
 # ── Inlines ───────────────────────────────────────────────────────────────────
@@ -182,3 +182,14 @@ class MeetingAdmin(admin.ModelAdmin):
             'failures': data['failures'],
         }
         return render(request, 'admin/meetings/pipeline_status.html', context)
+
+
+@admin.register(PipelineStatus)
+class PipelineStatusAdmin(admin.ModelAdmin):
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        return redirect('/admin/meetings/meeting/pipeline-status/')
+
+    def has_add_permission(self, request):        return False
+    def has_change_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False

@@ -119,3 +119,12 @@ class MeetingTopic(models.Model):
             models.Index(fields=['organisation', 'label']),
             models.Index(fields=['meeting']),
         ]
+
+
+
+class PipelineStatus(Meeting):
+    """Proxy used solely to add a Pipeline Status link to the Django admin sidebar."""
+    class Meta:
+        proxy               = True
+        verbose_name        = 'Pipeline Status'
+        verbose_name_plural = '⚙ Pipeline Status'
