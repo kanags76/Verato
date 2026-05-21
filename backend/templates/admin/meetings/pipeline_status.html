@@ -1,150 +1,135 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <style>
-  .pipeline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-  .card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; }
-  .card h3 { margin: 0 0 4px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: .05em; }
-  .card .value { font-size: 32px; font-weight: 700; line-height: 1; }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 9px; font-size: 11px; font-weight: 600; color: #fff; }
-  .pending    { background: #f59e0b; }
-  .processing { background: #3b82f6; }
-  .complete   { background: #10b981; }
-  .failed     { background: #ef4444; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-  th, td { padding: 8px 12px; border-bottom: 1px solid #eee; text-align: left; }
-  th { background: #f9f9f9; font-weight: 600; }
-  .section { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
-  .section h2 { margin: 0 0 12px; font-size: 15px; }
-  .refresh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  #last-refreshed { color: #888; font-size: 12px; }
+  .pip-grid   { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
+  .pip-card   { background:var(--darkened-bg,#1c2730); border:1px solid var(--border-color,#415870); border-radius:6px; padding:16px 20px; }
+  .pip-card h3{ margin:0 0 6px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--body-quiet-color,#8a9ab0); }
+  .pip-card .val{ font-size:36px; font-weight:700; line-height:1; color:var(--body-fg,#dee0e3); }
+  .pip-card .val.amber { color:#f59e0b; }
+  .pip-card .val.blue  { color:#3b82f6; }
+  .pip-card .val.green { color:#10b981; }
+  .pip-card .val.red   { color:#ef4444; }
+
+  .pip-section { background:var(--darkened-bg,#1c2730); border:1px solid var(--border-color,#415870); border-radius:6px; padding:16px 20px; margin-bottom:16px; }
+  .pip-section h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--body-fg,#dee0e3); }
+
+  .pip-table  { width:100%; border-collapse:collapse; font-size:13px; }
+  .pip-table th { padding:8px 12px; background:var(--header-bg,#264b5d); color:var(--header-color,#fff); font-weight:600; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .pip-table td { padding:8px 12px; border-bottom:1px solid var(--border-color,#415870); color:var(--body-fg,#dee0e3); vertical-align:top; }
+  .pip-table tr:last-child td { border-bottom:none; }
+  .pip-table .empty { color:var(--body-quiet-color,#8a9ab0); font-style:italic; }
+  .pip-table .err   { color:#ef4444; font-size:11px; font-family:monospace; word-break:break-all; }
+  .pip-table a { color:#79aec8; }
+
+  .refresh-bar { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+  .refresh-bar .updated { color:var(--body-quiet-color,#8a9ab0); font-size:12px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:#fff; }
+  .b-amber{background:#f59e0b;} .b-blue{background:#3b82f6;} .b-green{background:#10b981;} .b-red{background:#ef4444;}
+  .divider { border:none; border-top:1px solid var(--border-color,#415870); margin:0 0 20px; }
 </style>
 
+<hr class="divider">
+
 <div class="refresh-bar">
-  <button class="button" onclick="refresh()">↺ Refresh</button>
-  <label><input type="checkbox" id="auto-refresh" onchange="toggleAuto()"> Auto-refresh every 5 s</label>
-  <span id="last-refreshed"></span>
+  <button class="button" onclick="doRefresh()">↺ Refresh</button>
+  <label style="color:var(--body-fg,#dee0e3);font-size:13px;">
+    <input type="checkbox" id="auto-cb" onchange="toggleAuto()"> Auto-refresh every 5 s
+  </label>
+  <span class="updated" id="ts"></span>
 </div>
-
-
-<script>
-let timer = null;
-function refresh() {
-  fetch('api/')
-    .then(r => r.json())
-    .then(data => {
-      renderData(data);
-      document.getElementById('last-refreshed').textContent = 'Updated ' + new Date().toLocaleTimeString();
-    });
-}
-function toggleAuto() {
-  if (document.getElementById('auto-refresh').checked) {
-    timer = setInterval(refresh, 5000);
-  } else {
-    clearInterval(timer);
-  }
-}
-function renderData(d) {
-  const q = d.queues;
-  const s = d.statuses;
-  document.getElementById('q-default').textContent       = q.default ?? '–';
-  document.getElementById('q-extractions').textContent   = q.extractions ?? '–';
-  document.getElementById('q-notifications').textContent = q.notifications ?? '–';
-  document.getElementById('s-pending').textContent    = s.pending;
-  document.getElementById('s-processing').textContent = s.processing;
-  document.getElementById('s-complete').textContent   = s.complete;
-  document.getElementById('s-failed').textContent     = s.failed;
-
-  const stuckBody = document.getElementById('stuck-body');
-  stuckBody.innerHTML = d.stuck.length ? d.stuck.map(m =>
-    `<tr><td>${m.title}</td><td>${m['organisation__name']}</td><td>${m.created_at}</td>
-     <td><a href="/admin/meetings/meeting/${m.id}/change/">View</a></td></tr>`
-  ).join('') : '<tr><td colspan="4" style="color:#888">None</td></tr>';
-
-  const failBody = document.getElementById('fail-body');
-  failBody.innerHTML = d.failures.length ? d.failures.map(m =>
-    `<tr><td>${m.title}</td><td style="color:#ef4444;font-size:11px">${(m.processing_error||'').slice(0,100)}</td><td>${m.created_at}</td>
-     <td><a href="/admin/meetings/meeting/${m.id}/change/">View</a></td></tr>`
-  ).join('') : '<tr><td colspan="4" style="color:#888">None</td></tr>';
-}
-</script>
 
 <!-- Redis queues -->
-<div class="pipeline-grid">
-  <div class="card">
-    <h3>Redis: default queue</h3>
-    <div class="value" id="q-default">{{ queues.default|default:"–" }}</div>
+<div class="pip-grid" id="queue-grid">
+  {% for name, depth in queues_list %}
+  <div class="pip-card">
+    <h3>{{ name }} queue</h3>
+    <div class="val {% if depth > 0 %}amber{% endif %}" data-queue="{{ forloop.counter0 }}">{{ depth }}</div>
   </div>
-  <div class="card">
-    <h3>Redis: extractions queue</h3>
-    <div class="value" id="q-extractions">{{ queues.extractions|default:"–" }}</div>
-  </div>
-  <div class="card">
-    <h3>Redis: notifications queue</h3>
-    <div class="value" id="q-notifications">{{ queues.notifications|default:"–" }}</div>
-  </div>
+  {% endfor %}
 </div>
 
-<!-- Meeting statuses -->
-<div class="pipeline-grid">
-  <div class="card">
-    <h3>Pending</h3>
-    <div class="value" id="s-pending" style="color:#f59e0b">{{ statuses.pending }}</div>
-  </div>
-  <div class="card">
-    <h3>Processing</h3>
-    <div class="value" id="s-processing" style="color:#3b82f6">{{ statuses.processing }}</div>
-  </div>
-  <div class="card">
-    <h3>Complete</h3>
-    <div class="value" id="s-complete" style="color:#10b981">{{ statuses.complete }}</div>
-  </div>
-  <div class="card">
-    <h3>Failed</h3>
-    <div class="value" id="s-failed" style="color:#ef4444">{{ statuses.failed }}</div>
-  </div>
+<!-- Status counts -->
+<div class="pip-grid" id="status-grid">
+  <div class="pip-card"><h3>Pending</h3>   <div class="val amber" id="s-pending">{{ statuses.pending }}</div></div>
+  <div class="pip-card"><h3>Processing</h3><div class="val blue"  id="s-processing">{{ statuses.processing }}</div></div>
+  <div class="pip-card"><h3>Complete</h3>  <div class="val green" id="s-complete">{{ statuses.complete }}</div></div>
+  <div class="pip-card"><h3>Failed</h3>    <div class="val red"   id="s-failed">{{ statuses.failed }}</div></div>
 </div>
 
-<!-- Stuck meetings -->
-<div class="section">
-  <h2>⚠️ Stuck (processing &gt; 10 min)</h2>
-  <table>
+<!-- Stuck -->
+<div class="pip-section">
+  <h2>⚠ Stuck — processing longer than 10 min</h2>
+  <table class="pip-table">
     <thead><tr><th>Title</th><th>Org</th><th>Created</th><th></th></tr></thead>
     <tbody id="stuck-body">
-      {% if stuck %}
-        {% for m in stuck %}
-        <tr>
-          <td>{{ m.title }}</td>
-          <td>{{ m.organisation__name }}</td>
-          <td>{{ m.created_at }}</td>
-          <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">View</a></td>
-        </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="4" style="color:#888">None</td></tr>
+      {% if stuck %}{% for m in stuck %}
+      <tr>
+        <td>{{ m.title }}</td>
+        <td>{{ m.organisation__name }}</td>
+        <td>{{ m.created_at|date:"d M H:i" }}</td>
+        <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">→ View</a></td>
+      </tr>
+      {% endfor %}{% else %}
+      <tr><td colspan="4" class="empty">None — all clear</td></tr>
       {% endif %}
     </tbody>
   </table>
 </div>
 
-<!-- Recent failures -->
-<div class="section">
-  <h2>❌ Recent Failures</h2>
-  <table>
+<!-- Failures -->
+<div class="pip-section">
+  <h2>✕ Recent Failures</h2>
+  <table class="pip-table">
     <thead><tr><th>Title</th><th>Error</th><th>Created</th><th></th></tr></thead>
     <tbody id="fail-body">
-      {% if failures %}
-        {% for m in failures %}
-        <tr>
-          <td>{{ m.title }}</td>
-          <td style="color:#ef4444;font-size:11px">{{ m.processing_error|truncatechars:100 }}</td>
-          <td>{{ m.created_at }}</td>
-          <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">View</a></td>
-        </tr>
-        {% endfor %}
-      {% else %}
-        <tr><td colspan="4" style="color:#888">None</td></tr>
+      {% if failures %}{% for m in failures %}
+      <tr>
+        <td>{{ m.title }}</td>
+        <td class="err">{{ m.processing_error|truncatechars:120 }}</td>
+        <td>{{ m.created_at|date:"d M H:i" }}</td>
+        <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">→ View</a></td>
+      </tr>
+      {% endfor %}{% else %}
+      <tr><td colspan="4" class="empty">None</td></tr>
       {% endif %}
     </tbody>
   </table>
 </div>
+
+<script>
+let _timer = null;
+
+function doRefresh() {
+  fetch('api/')
+    .then(r => r.json())
+    .then(d => {
+      // queues
+      (d.queues_list || []).forEach((item, i) => {
+        const el = document.querySelector(`[data-queue="${i}"]`);
+        if (el) { el.textContent = item[1]; el.className = 'val' + (item[1] > 0 ? ' amber' : ''); }
+      });
+      // statuses
+      document.getElementById('s-pending').textContent    = d.statuses.pending;
+      document.getElementById('s-processing').textContent = d.statuses.processing;
+      document.getElementById('s-complete').textContent   = d.statuses.complete;
+      document.getElementById('s-failed').textContent     = d.statuses.failed;
+      // stuck
+      const sb = document.getElementById('stuck-body');
+      sb.innerHTML = d.stuck.length
+        ? d.stuck.map(m => `<tr><td>${m.title}</td><td>${m.organisation__name}</td><td>${m.created_at}</td><td><a href="/admin/meetings/meeting/${m.id}/change/">→ View</a></td></tr>`).join('')
+        : '<tr><td colspan="4" class="empty">None — all clear</td></tr>';
+      // failures
+      const fb = document.getElementById('fail-body');
+      fb.innerHTML = d.failures.length
+        ? d.failures.map(m => `<tr><td>${m.title}</td><td class="err">${(m.processing_error||'').slice(0,120)}</td><td>${m.created_at}</td><td><a href="/admin/meetings/meeting/${m.id}/change/">→ View</a></td></tr>`).join('')
+        : '<tr><td colspan="4" class="empty">None</td></tr>';
+
+      document.getElementById('ts').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    });
+}
+
+function toggleAuto() {
+  _timer ? (clearInterval(_timer), _timer = null) : (_timer = setInterval(doRefresh, 5000));
+}
+</script>
 {% endblock %}

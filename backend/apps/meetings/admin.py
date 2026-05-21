@@ -156,6 +156,11 @@ class MeetingAdmin(admin.ModelAdmin):
 
         return {
             'queues':   queues,
+            'queues_list': [
+                ('Default',       queues.get('default', 0)),
+                ('Extractions',   queues.get('extractions', 0)),
+                ('Notifications', queues.get('notifications', 0)),
+            ],
             'statuses': statuses,
             'stuck':    stuck,
             'failures': failures,
@@ -163,23 +168,26 @@ class MeetingAdmin(admin.ModelAdmin):
 
     def pipeline_status_api(self, request):
         data = self._get_pipeline_data()
-        # Make datetimes serialisable
         for item in data['stuck'] + data['failures']:
             if 'created_at' in item and item['created_at']:
-                item['created_at'] = item['created_at'].isoformat()
-        return JsonResponse(data)
+                item['created_at'] = item['created_at'].strftime('%-d %b %H:%M')
+        return JsonResponse({
+            'queues_list': data['queues_list'],
+            'statuses':    data['statuses'],
+            'stuck':       data['stuck'],
+            'failures':    data['failures'],
+        })
 
     def pipeline_status_view(self, request):
         from django.shortcuts import render
         data = self._get_pipeline_data()
         context = {
             **self.admin_site.each_context(request),
-            'title':    'Pipeline Status',
-            'data':     data,
-            'queues':   data['queues'],
-            'statuses': data['statuses'],
-            'stuck':    data['stuck'],
-            'failures': data['failures'],
+            'title':       'Pipeline Status',
+            'queues_list': data['queues_list'],
+            'statuses':    data['statuses'],
+            'stuck':       data['stuck'],
+            'failures':    data['failures'],
         }
         return render(request, 'admin/meetings/pipeline_status.html', context)
 
