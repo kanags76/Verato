@@ -54,6 +54,42 @@ def _issue_tokens(user):
 
 @extend_schema(
     tags=['auth'],
+    summary='Current user profile',
+    responses={200: inline_serializer('MeResponse', fields={
+        'id':           drf_serializers.UUIDField(),
+        'email':        drf_serializers.EmailField(),
+        'name':         drf_serializers.CharField(),
+        'is_org_admin': drf_serializers.BooleanField(),
+        'organisation': inline_serializer('MeOrg', fields={
+            'id':   drf_serializers.UUIDField(),
+            'name': drf_serializers.CharField(),
+            'slug': drf_serializers.CharField(),
+            'plan': drf_serializers.CharField(),
+        }, allow_null=True),
+    })},
+)
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        org = get_user_org(request)
+        return Response({
+            'id':           user.id,
+            'email':        user.email,
+            'name':         f'{user.first_name} {user.last_name}'.strip() or user.username,
+            'is_org_admin': user.is_org_admin,
+            'organisation': {
+                'id':   org.id,
+                'name': org.name,
+                'slug': org.slug,
+                'plan': org.plan,
+            } if org else None,
+        })
+
+
+@extend_schema(
+    tags=['auth'],
     summary='Logout — blacklist the refresh token',
     request=inline_serializer('LogoutRequest', fields={'refresh': drf_serializers.CharField()}),
     responses={204: None},
