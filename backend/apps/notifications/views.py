@@ -194,17 +194,17 @@ def slack_oauth_start(request):
     from rest_framework_simplejwt.exceptions import TokenError
     from apps.accounts.models import User
 
-    # Authenticate via ?auth=<jwt> query param if not already authenticated
-    if not request.user.is_authenticated:
-        token_str = request.GET.get('auth', '')
-        if not token_str:
-            return HttpResponse('Unauthorized', status=401)
+    # ?auth=<jwt> takes priority over session cookies (browser flow)
+    token_str = request.GET.get('auth', '')
+    if token_str:
         try:
             token = AccessToken(token_str)
             user = User.objects.get(pk=token['user_id'])
             request.user = user
         except (TokenError, User.DoesNotExist):
             return HttpResponse('Invalid or expired token.', status=401)
+    elif not request.user.is_authenticated:
+        return HttpResponse('Unauthorized', status=401)
 
     org = getattr(request.user, 'organisation', None)
     if org is None:
