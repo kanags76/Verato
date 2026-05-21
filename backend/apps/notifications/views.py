@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 from rest_framework.decorators import api_view, permission_classes as drf_permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 
 from apps.commitments.models import Commitment
 
@@ -23,6 +24,19 @@ logger = logging.getLogger(__name__)
 
 # ── Slack connection status ───────────────────────────────────────────────────
 
+@extend_schema(
+    tags=['slack'],
+    summary='Slack connection status',
+    description='Returns whether the org Slack workspace is connected and workspace metadata.',
+    responses={200: {
+        'type': 'object',
+        'properties': {
+            'connected':      {'type': 'boolean'},
+            'workspace_id':   {'type': 'string', 'nullable': True},
+            'workspace_name': {'type': 'string', 'nullable': True},
+        },
+    }},
+)
 @api_view(['GET'])
 @drf_permission_classes([IsAuthenticated])
 def slack_status(request):
@@ -40,6 +54,12 @@ def slack_status(request):
     })
 
 
+@extend_schema(
+    tags=['slack'],
+    summary='Send test Slack DM',
+    description='Sends a test DM to the requesting user\'s linked Slack account. Requires slack_user_id set on the person.',
+    responses={200: {'type': 'object', 'properties': {'detail': {'type': 'string'}}}},
+)
 @api_view(['POST'])
 @drf_permission_classes([IsAuthenticated])
 def slack_test_message(request):
@@ -89,6 +109,12 @@ def _verify_slack_signature(request) -> bool:
         return False
 
 
+@extend_schema(
+    tags=['slack'],
+    summary='Slack interactive button webhook',
+    description='Receives Slack button-click payloads (Done / Need more time / Blocked) from nudge DMs. Called by Slack — not for direct use.',
+    responses={200: None},
+)
 @csrf_exempt
 @require_POST
 def slack_actions(request):
@@ -152,6 +178,12 @@ def _handle_blocked(commitment):
 
 # ── Slack OAuth ───────────────────────────────────────────────────────────────
 
+@extend_schema(
+    tags=['slack'],
+    summary='Start Slack OAuth',
+    description='Redirects the browser to Slack\'s OAuth consent screen. Open this URL directly in the browser after obtaining a JWT token.',
+    responses={302: None},
+)
 def slack_oauth_start(request):
     """
     Redirect the authenticated user's browser to Slack's OAuth consent screen.
