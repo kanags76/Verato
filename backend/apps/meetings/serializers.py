@@ -46,7 +46,7 @@ class MeetingStatusSerializer(serializers.Serializer):
 
 class MeetingUploadSerializer(serializers.Serializer):
     title        = serializers.CharField(max_length=500)
-    occurred_at  = serializers.DateTimeField()
+    occurred_at  = serializers.DateTimeField(required=False, default=None)
     participants = serializers.CharField(
         required=False, default='', allow_blank=True,
         help_text='Comma-separated participant names e.g. "Sarah K., Tom R., Maya L."',

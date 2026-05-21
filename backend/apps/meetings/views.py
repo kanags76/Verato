@@ -183,7 +183,7 @@ class MeetingUploadView(APIView):
         meeting = Meeting.objects.create(
             organisation=org,
             title=data['title'],
-            occurred_at=data['occurred_at'],
+            occurred_at=data.get('occurred_at') or timezone.now(),
             platform=Meeting.Platform.UPLOAD,
             raw_transcript=transcript,
             word_count=len(transcript.split()),
