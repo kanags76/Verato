@@ -1,0 +1,15 @@
+{% extends "admin/base.html" %}
+
+{% block branding %}
+<h1 id="site-name"><a href="{% url 'admin:index' %}">Verato Admin</a></h1>
+{% endblock %}
+
+{% block nav-global %}
+<div style="padding: 8px 16px; border-top: 1px solid #416b8d;">
+  <a href="/admin/meetings/meeting/pipeline-status/"
+     style="color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 6px; padding: 6px 0; opacity: 0.9;"
+     onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.9'">
+    ⚙ Pipeline Status
+  </a>
+</div>
+{% endblock %}
