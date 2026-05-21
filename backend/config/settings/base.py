@@ -115,7 +115,7 @@ REST_FRAMEWORK = {
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = ['authorization', 'content-type', 'accept', 'x-requested-with']
 
-# Vertex AI — auth via ADC (gcloud auth application-default login), no API key
+GEMINI_API_KEY          = config('GEMINI_API_KEY',          default='')
 GOOGLE_CLOUD_PROJECT    = config('GOOGLE_CLOUD_PROJECT',    default='verato')
 GOOGLE_CLOUD_LOCATION   = config('GOOGLE_CLOUD_LOCATION',   default='us-central1')
 GEMINI_EXTRACTION_MODEL = config('GEMINI_EXTRACTION_MODEL', default='gemini-2.5-flash-lite')
