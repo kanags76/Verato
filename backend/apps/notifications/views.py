@@ -187,15 +187,24 @@ def _handle_blocked(commitment):
 def slack_oauth_start(request):
     """
     Redirect the authenticated user's browser to Slack's OAuth consent screen.
-    The org ID is embedded in a signed state parameter to survive the redirect.
-    Requires the user to be logged in (auth handled at URL level via JWT middleware
-    won't help here since this is a browser redirect — front-end must pass token
-    then redirect; for now this is called after the FE confirms auth).
+    Accepts JWT via ?auth= query param (for browser redirects where headers can't be set)
+    or standard Authorization header.
     """
-    from apps.accounts.models import Organisation
+    from rest_framework_simplejwt.tokens import AccessToken
+    from rest_framework_simplejwt.exceptions import TokenError
+    from apps.accounts.models import User
 
+    # Authenticate via ?auth=<jwt> query param if not already authenticated
     if not request.user.is_authenticated:
-        return HttpResponse('Unauthorized', status=401)
+        token_str = request.GET.get('auth', '')
+        if not token_str:
+            return HttpResponse('Unauthorized', status=401)
+        try:
+            token = AccessToken(token_str)
+            user = User.objects.get(pk=token['user_id'])
+            request.user = user
+        except (TokenError, User.DoesNotExist):
+            return HttpResponse('Invalid or expired token.', status=401)
 
     org = getattr(request.user, 'organisation', None)
     if org is None:
