@@ -1,0 +1,153 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+  .pipeline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; }
+  .card h3 { margin: 0 0 4px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: .05em; }
+  .card .value { font-size: 32px; font-weight: 700; line-height: 1; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 9px; font-size: 11px; font-weight: 600; color: #fff; }
+  .pending    { background: #f59e0b; }
+  .processing { background: #3b82f6; }
+  .complete   { background: #10b981; }
+  .failed     { background: #ef4444; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid #eee; text-align: left; }
+  th { background: #f9f9f9; font-weight: 600; }
+  .section { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+  .section h2 { margin: 0 0 12px; font-size: 15px; }
+  .refresh-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  #last-refreshed { color: #888; font-size: 12px; }
+</style>
+
+<div class="refresh-bar">
+  <button class="button" onclick="refresh()">↺ Refresh</button>
+  <label><input type="checkbox" id="auto-refresh" onchange="toggleAuto()"> Auto-refresh every 5 s</label>
+  <span id="last-refreshed"></span>
+</div>
+
+<div id="content-area">
+  {% include "admin/meetings/_pipeline_data.html" %}
+</div>
+
+<script>
+let timer = null;
+function refresh() {
+  fetch('api/')
+    .then(r => r.json())
+    .then(data => {
+      renderData(data);
+      document.getElementById('last-refreshed').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    });
+}
+function toggleAuto() {
+  if (document.getElementById('auto-refresh').checked) {
+    timer = setInterval(refresh, 5000);
+  } else {
+    clearInterval(timer);
+  }
+}
+function renderData(d) {
+  const q = d.queues;
+  const s = d.statuses;
+  document.getElementById('q-default').textContent       = q.default ?? '–';
+  document.getElementById('q-extractions').textContent   = q.extractions ?? '–';
+  document.getElementById('q-notifications').textContent = q.notifications ?? '–';
+  document.getElementById('s-pending').textContent    = s.pending;
+  document.getElementById('s-processing').textContent = s.processing;
+  document.getElementById('s-complete').textContent   = s.complete;
+  document.getElementById('s-failed').textContent     = s.failed;
+
+  const stuckBody = document.getElementById('stuck-body');
+  stuckBody.innerHTML = d.stuck.length ? d.stuck.map(m =>
+    `<tr><td>${m.title}</td><td>${m['organisation__name']}</td><td>${m.created_at}</td>
+     <td><a href="/admin/meetings/meeting/${m.id}/change/">View</a></td></tr>`
+  ).join('') : '<tr><td colspan="4" style="color:#888">None</td></tr>';
+
+  const failBody = document.getElementById('fail-body');
+  failBody.innerHTML = d.failures.length ? d.failures.map(m =>
+    `<tr><td>${m.title}</td><td style="color:#ef4444;font-size:11px">${(m.processing_error||'').slice(0,100)}</td><td>${m.created_at}</td>
+     <td><a href="/admin/meetings/meeting/${m.id}/change/">View</a></td></tr>`
+  ).join('') : '<tr><td colspan="4" style="color:#888">None</td></tr>';
+}
+</script>
+
+<!-- Redis queues -->
+<div class="pipeline-grid">
+  <div class="card">
+    <h3>Redis: default queue</h3>
+    <div class="value" id="q-default">{{ queues.default|default:"–" }}</div>
+  </div>
+  <div class="card">
+    <h3>Redis: extractions queue</h3>
+    <div class="value" id="q-extractions">{{ queues.extractions|default:"–" }}</div>
+  </div>
+  <div class="card">
+    <h3>Redis: notifications queue</h3>
+    <div class="value" id="q-notifications">{{ queues.notifications|default:"–" }}</div>
+  </div>
+</div>
+
+<!-- Meeting statuses -->
+<div class="pipeline-grid">
+  <div class="card">
+    <h3>Pending</h3>
+    <div class="value" id="s-pending" style="color:#f59e0b">{{ statuses.pending }}</div>
+  </div>
+  <div class="card">
+    <h3>Processing</h3>
+    <div class="value" id="s-processing" style="color:#3b82f6">{{ statuses.processing }}</div>
+  </div>
+  <div class="card">
+    <h3>Complete</h3>
+    <div class="value" id="s-complete" style="color:#10b981">{{ statuses.complete }}</div>
+  </div>
+  <div class="card">
+    <h3>Failed</h3>
+    <div class="value" id="s-failed" style="color:#ef4444">{{ statuses.failed }}</div>
+  </div>
+</div>
+
+<!-- Stuck meetings -->
+<div class="section">
+  <h2>⚠️ Stuck (processing &gt; 10 min)</h2>
+  <table>
+    <thead><tr><th>Title</th><th>Org</th><th>Created</th><th></th></tr></thead>
+    <tbody id="stuck-body">
+      {% if stuck %}
+        {% for m in stuck %}
+        <tr>
+          <td>{{ m.title }}</td>
+          <td>{{ m.organisation__name }}</td>
+          <td>{{ m.created_at }}</td>
+          <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">View</a></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="4" style="color:#888">None</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Recent failures -->
+<div class="section">
+  <h2>❌ Recent Failures</h2>
+  <table>
+    <thead><tr><th>Title</th><th>Error</th><th>Created</th><th></th></tr></thead>
+    <tbody id="fail-body">
+      {% if failures %}
+        {% for m in failures %}
+        <tr>
+          <td>{{ m.title }}</td>
+          <td style="color:#ef4444;font-size:11px">{{ m.processing_error|truncatechars:100 }}</td>
+          <td>{{ m.created_at }}</td>
+          <td><a href="/admin/meetings/meeting/{{ m.id }}/change/">View</a></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="4" style="color:#888">None</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
