@@ -172,7 +172,8 @@ class MeetingUploadView(APIView):
         if org is None:
             return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = MeetingUploadSerializer(data=request.data)
+        merged = {**request.data, **request.FILES}
+        serializer = MeetingUploadSerializer(data=merged)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
@@ -291,7 +292,8 @@ class MeetingImportView(APIView):
         if org is None:
             return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = MeetingImportSerializer(data=request.data)
+        merged = {**request.data, **request.FILES}
+        serializer = MeetingImportSerializer(data=merged)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
