@@ -248,6 +248,15 @@ Or SSH in and run it:
 ssh -i ~/.ssh/verato-ec2.pem ubuntu@api.verato.twocents.ai "cd /opt/verato && bash scripts/deploy.sh"
 ```
 
+> **Important:** `deploy.sh` always runs `docker compose up -d --build`, which rebuilds the image from the latest code.  
+> Never use `docker compose restart web` alone — that reuses the **old image** and your code changes will not be picked up.  
+> After any Python code change (views, models, tasks, serializers): **always rebuild**.
+
+The deploy script runs three steps automatically:
+1. `git pull origin main` — fetch latest code
+2. `docker compose up -d --build` — rebuild image + restart all containers
+3. `python manage.py migrate` — apply any pending migrations
+
 ---
 
 ## AWS Resources Summary

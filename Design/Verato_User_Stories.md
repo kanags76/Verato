@@ -27,7 +27,7 @@ Acceptance criteria
 - Back button returns to plan picker (preserving plan)
 - Submit shows "Creating account…" loading state then auto-advances to onboarding
 - Error states are inline per-field, not in a banner
-API needs: ✅ POST /api/v1/auth/register/ · ⚠️ org_name + plan in payload · 🆕 is_first_login flag in response · 🆕 email verification endpoints
+API needs: ✅ POST /api/v1/auth/register/ · ✅ org_name + plan in payload · ✅ is_first_login flag in response · 🆕 email verification endpoints
 
 ## US-1.3 — Connect Slack during onboarding
 As a: CoS
@@ -40,7 +40,7 @@ Acceptance criteria
 - "Add to Slack" CTA in Slack-purple branding
 - "Skip for now — connect later from Settings" option
 - Skip and connect both route forward to the Import step
-API needs: ✅ GET /api/v1/integrations/slack/oauth-url/ · ✅ OAuth callback · 🆕 GET .../slack/status/ · 🆕 POST .../slack/test-message/
+API needs: ✅ GET /api/v1/integrations/slack/oauth-url/ · ✅ OAuth callback · ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/
 
 ## US-1.4 — Import my existing tracker
 As a: CoS
@@ -54,7 +54,7 @@ Acceptance criteria
 - Disabled "Extract items" button until file or text present
 - "I'll start fresh" skip option
 - After extraction completes, routes to Extraction Review with source = 'import'
-API needs: 🆕 POST /api/v1/imports/ (distinct from meetings) · 🆕 GET /api/v1/extraction-jobs/<id>/ for progress polling · 🆕 imported items have meeting_id: null + import_id: <id>
+API needs: ✅ POST /api/v1/meetings/import/ · ✅ GET /api/v1/meetings/{id}/status/ for progress polling · ✅ imported commitments have source=import
 
 # Epic 2 — Daily command centre (Dashboard)
 ## US-2.1 — See what needs my attention right now
@@ -67,14 +67,14 @@ Acceptance criteria
 - Clicking a stat filters the list below to that status
 - Numbers use monospace type for stable alignment
 - "Week of [date]" subtitle anchors the view in time
-API needs: 🆕 GET /api/v1/dashboard/stats/ (single aggregate) · ✅ filtered list endpoints
+API needs: ✅ GET /api/v1/dashboard/ (single aggregate) · ✅ filtered list endpoints
 
 ## US-2.2 — Filter commitments by status
 As a: CoS
 I want to: Switch between status views with one click
 So that: I can focus on overdue items, then sweep at-risk, then check delivered
 Acceptance criteria
-- Tab row: All active · Needs attention · At risk · On track · Delivered
+- Tab row: All active · Needs attention · At risk · On track · Done
 - Active tab is underlined in accent colour with bold text
 - List below updates instantly without page reload
 - "Nothing here — all clear" empty state with a check icon
@@ -90,7 +90,7 @@ Acceptance criteria
 - Active chips have a filled background; inactive are outlined
 - Filters compose with status tabs (e.g. "At risk + P1")
 - "Clear" link appears when any chip is active
-API needs: ⚠️ GET /api/v1/commitments/?priority=high · 🆕 priority field on Commitment model
+API needs: ✅ GET /api/v1/commitments/?priority=high · ✅ priority field on Commitment model
 
 ## US-2.4 — Filter by tag with one click
 As a: CoS preparing for a board meeting
@@ -102,7 +102,7 @@ Acceptance criteria
 - A banner appears below the filter row: "Filtered by tag: #pricing · clear ×"
 - Banner persists across status / priority filter changes
 - Clear × removes only the tag filter, not other filters
-API needs: ⚠️ GET /api/v1/commitments/?tag=<> · 🆕 GET /api/v1/tags/ for tag library + autocomplete
+API needs: ✅ GET /api/v1/commitments/?tags__label=<> · ✅ GET /api/v1/tags/ for tag library + autocomplete
 
 ## US-2.5 — Scan commitments efficiently
 As a: CoS
@@ -138,19 +138,19 @@ Acceptance criteria
 - Risk score component: percentage, coloured progress bar, formula breakdown (50% deadline / 35% owner / 15% recency)
 - Original quote in an italic accent-bordered block
 - Tags as pills below
-API needs: ✅ GET /api/v1/commitments/<id>/ · ⚠️ risk_score_breakdown field needed
+API needs: ✅ GET /api/v1/commitments/{id}/ · ⚠️ risk_score_breakdown field needed
 
 ## US-3.2 — Take action on a commitment
 As a: CoS
 I want to: Resolve, defer, escalate, or nudge from the detail screen
 So that: I don't need to go elsewhere to act
 Acceptance criteria
-- 4 action buttons: Send nudge · Mark delivered · Defer · Cancel
+- 4 action buttons: Send nudge · Mark done · Defer · Cancel
 - Send nudge disabled if nudge sent in last 20 hours (shows 'Sent Xhr ago')
 - Defer opens a date picker inline
 - Cancel prompts 'Are you sure?' with undo option
 - All actions create an event in the history timeline
-API needs: ✅ POST /api/v1/commitments/<id>/escalate/ · resolve/ · ✅ Slack nudge endpoint
+API needs: ✅ POST /api/v1/commitments/{id}/escalate/ · resolve/ · reopen/ · ✅ Slack nudge endpoint
 
 ## US-3.3 — Read the full audit history
 As a: CoS
@@ -161,7 +161,7 @@ Acceptance criteria
 - Events: extraction, confirmation, status changes, nudges sent, owner replies, manual edits
 - Timestamps shown in local time, UTC stored
 - Owner replies shown verbatim (Done / Delayed / Blocked)
-API needs: ✅ EscalationEvent + ExtractionFeedback tables · ⚠️ unified timeline endpoint
+API needs: ✅ EscalationEvent + ExtractionFeedback + CommitmentEvent tables · ✅ GET /api/v1/commitments/{id}/history/ unified audit log
 
 # Epic 4 — Extraction review
 ## US-4.1 — Review AI-extracted commitments
@@ -184,7 +184,7 @@ Acceptance criteria
 - Only items meeting the threshold are confirmed; others remain for individual review
 - Threshold is the org's configured confidence_threshold
 - Button shows count: 'Confirm 7 high-confidence items →'
-API needs: 🆕 POST /api/v1/meetings/<id>/batch-confirm/ {min_confidence: 0.80}
+API needs: ✅ POST /api/v1/commitments/bulk-confirm/ {min_confidence: 0.80, meeting: <id>}
 
 ## US-4.3 — Correct the owner attribution
 As a: CoS
@@ -194,7 +194,7 @@ Acceptance criteria
 - Owner field is editable inline (typeahead from existing persons)
 - Selecting a new owner logs a WRONG_OWNER feedback signal
 - The commit still confirms with the corrected owner
-API needs: ⚠️ PATCH /api/v1/pending-commitments/<id>/ · ✅ ExtractionFeedback with type=WRONG_OWNER
+API needs: ✅ PATCH /api/v1/commitments/{id}/ · ✅ ExtractionFeedback with type=WRONG_OWNER
 
 ## US-4.4 — Correct the deadline
 As a: CoS
@@ -205,7 +205,7 @@ Acceptance criteria
 - Editing logs a WRONG_DATE feedback signal
 - Edits persist as part of the confirm action
 - Visual indicator on rows that have been edited from the LLM's original suggestion
-API needs: ⚠️ PATCH /api/v1/pending-commitments/<id>/ (edit before confirm)
+API needs: ✅ PATCH /api/v1/commitments/{id}/ (edit before confirm — normalised_text, owner, deadline all writable)
 
 ## US-4.5 — Push confirmed items into the tracker
 As a: CoS done reviewing
@@ -216,7 +216,7 @@ Acceptance criteria
 - Disabled until at least one item is confirmed AND none are still pending
 - After click: success state, then auto-routes to Dashboard
 - Dashboard reflects the new commitments immediately
-API needs: ✅ confirmation endpoints already create commitment records · 🆕 POST .../meetings/<id>/finalise/ could be a single batch endpoint
+API needs: ✅ confirmation endpoints already create commitment records · ✅ POST /api/v1/commitments/bulk-confirm/ as batch endpoint
 
 # Epic 5 — Slack nudges (owner side)
 ## US-5.1 — Receive a clear, actionable nudge
@@ -229,7 +229,7 @@ Acceptance criteria
 - "Need more time" opens a date picker
 - "Blocked" opens a free-text input
 - "View in Verato" link opens the commitment detail page
-API needs: ✅ Slack bot infra · ✅ button webhook handling · 🆕 deep link from Slack to web detail screen with auth
+API needs: ✅ Slack bot infra · ✅ button webhook handling · ⚠️ deep link from Slack to web detail screen with auth
 
 ## US-5.2 — Get nudged at the right time
 As an: Owner
@@ -253,7 +253,7 @@ Acceptance criteria
 - "Send invite" sends and shows "Sent ✓" success state
 - Invitee appears in members list as PENDING until they accept
 - 7-day invite link mentioned in helper copy
-API needs: ✅ POST /api/v1/orgs/<id>/invitations/ · 🆕 resend / revoke endpoints
+API needs: ✅ POST /api/v1/auth/invite/ · ✅ GET /api/v1/auth/invitations/ (list sent invites) · 🆕 resend / revoke endpoints
 
 ## US-6.2 — Manage Slack integration post-onboarding
 As an: Admin
@@ -264,7 +264,7 @@ Acceptance criteria
 - If connected: green status card with workspace name + "● Connected" pill
 - If not connected: "Add to Slack" CTA (matches onboarding screen)
 - Section to enter / verify the Admin's own Slack user ID with helper copy
-API needs: 🆕 GET .../slack/status/ · 🆕 POST .../slack/test-message/ · 🆕 PATCH /api/v1/users/<id>/ with slack_user_id
+API needs: ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/ · ✅ POST /api/v1/persons/{id}/link-slack/ to set slack_user_id
 
 ## US-6.3 — Tune extraction confidence threshold
 As an: Admin
@@ -276,7 +276,7 @@ Acceptance criteria
 - Live numeric readout in monospace
 - "Commitments below this confidence are shown for manual review" helper copy
 - Save button persists
-API needs: ⚠️ PATCH /api/v1/orgs/<id>/ with extraction_confidence_threshold
+API needs: ✅ PATCH /api/v1/orgs/{id}/settings/ with confidence_threshold
 
 # Epic 7 — People & analytics
 ## US-7.1 — See per-person delivery performance
@@ -288,7 +288,7 @@ Acceptance criteria
 - Each card: avatar, name, role, total commitments, meeting count, delivery rate (bar + percentage)
 - Delivery rate colour-coded (≥85% sage, 65–84% amber, <65% rose)
 - Cards are clickable (future: drill-in to person profile)
-API needs: ✅ GET /api/v1/people/ with aggregate fields · ⚠️ delivery_rate computed field
+API needs: ✅ GET /api/v1/persons/ with aggregate fields · ✅ delivery_rate computed field · ✅ POST (create) · ✅ PATCH (edit) · ✅ POST /persons/merge/ (deduplicate)
 
 ## US-7.2 — Browse meeting history
 As a: CoS
@@ -299,16 +299,18 @@ Acceptance criteria
 - Done indicator per row
 - Click → re-opens the Extraction Review for that meeting
 - Same Upload + Import CTAs as Dashboard in header
-API needs: ✅ GET /api/v1/meetings/ · 🆕 click-to-re-review behaviour relies on extraction status field
+API needs: ✅ GET /api/v1/meetings/ · ✅ processing_status field enables re-review routing · ✅ PATCH /meetings/{id}/ to edit title/date/type/summary · ✅ GET /meetings/{id}/participants/ · ✅ POST /meetings/{id}/link-participants/
 
 # Cross-cutting expectations
 ## US-X.1 — Trustworthy audit trail
 As a: CoS using Verato as my source of truth
 I want: Every state change to be timestamped and attributed
 So that: I can defend the tracker in a leadership review
-- Every commitment shows full event history
-- Events include: extraction, confirmation, status changes, nudges sent, owner replies, manual edits
+- Every commitment shows full event history via GET /commitments/{id}/history/
+- Events include: extraction, confirmation, status changes, nudges sent, owner replies, manual field edits
+- CommitmentEvent model stores old_value/new_value JSON for field edits; EscalationEvent records escalation chain
 - Timestamps in UTC stored, local time displayed
+API needs: ✅ CommitmentEvent model · ✅ GET /api/v1/commitments/{id}/history/ (unified log)
 
 ## US-X.2 — Forgiving by default
 As a: CoS who misclicks

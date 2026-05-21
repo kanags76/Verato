@@ -184,7 +184,7 @@ brew services stop redis
 | `/api/v1/auth/invitations/` | GET | List all sent invitations with status (admin only) |
 | `/api/v1/auth/token/` | POST | Login with email + password → JWT tokens |
 | `/api/v1/auth/token/refresh/` | POST | Refresh JWT |
-| `/api/v1/auth/token/blacklist/` | POST | Logout |
+| `/api/v1/auth/logout/` | POST | Logout — blacklists refresh token before clearing session |
 | **Org** | | |
 | `/api/v1/orgs/` | GET | List orgs accessible to current user |
 | `/api/v1/orgs/{id}/settings/` | PATCH | Update org settings: `confidence_threshold`, `nudge_hours_before`, `digest_day`, `digest_hour` |
@@ -192,28 +192,39 @@ brew services stop redis
 | `/api/v1/dashboard/` | GET | `{overdue, at_risk, on_track, total_active}` |
 | **Meetings** | | |
 | `/api/v1/meetings/` | GET | List org meetings (includes `commitment_count`, `pending_count`) |
-| `/api/v1/meetings/upload/` | POST | Upload transcript text or file → 202 + meeting_id |
+| `/api/v1/meetings/upload/` | POST | Upload transcript text or file → 202 + meeting_id; Gemini extracts commitments + participants async |
 | `/api/v1/meetings/import/` | POST | Upload prior tracker doc → 202 + meeting_id |
 | `/api/v1/meetings/{id}/` | GET | Meeting detail |
-| `/api/v1/meetings/{id}/status/` | GET | Poll processing status |
+| `/api/v1/meetings/{id}/` | PATCH | Update meeting title, date, meeting_type, or summary |
+| `/api/v1/meetings/{id}/status/` | GET | Poll processing status; includes `participant_count`, `confirmed_count` |
+| `/api/v1/meetings/{id}/participants/` | GET | List meeting participants with `confirmed` flag and `speaker_label` |
+| `/api/v1/meetings/{id}/add-participant/` | POST | Add a person to this meeting (`{person_id}` or `{person: {name, email?, role?}}`) |
+| `/api/v1/meetings/{id}/remove-participant/` | POST | Remove a person from this meeting (`{person_id}`) → 204 |
+| `/api/v1/meetings/{id}/link-participants/` | POST | Validate Gemini-detected participants: link to existing person, create new, or skip |
 | `/api/v1/meetings/zoom/webhook/` | POST | Zoom auto-ingest (stretch) |
 | **Commitments** | | |
 | `/api/v1/commitments/` | GET | List with filters: `?status=` `?owner=` `?priority=` `?source=` `?tags__label=` `?deadline_before=` `?risk_gte=` `?meeting=` |
-| `/api/v1/commitments/{id}/` | GET, PATCH | Detail (includes `tags[]`, `escalations[]`) / update owner, deadline, tags, priority |
+| `/api/v1/commitments/{id}/` | GET | Detail (includes `tags[]`, `escalations[]`, `history[]`) |
+| `/api/v1/commitments/{id}/` | PATCH | Update `normalised_text`, `owner`, `deadline`, `priority`, `tags` — all changes logged to history |
 | `/api/v1/commitments/bulk-confirm/` | POST | Confirm all PENDING_REVIEW; optional `{meeting?, min_confidence?}` |
 | `/api/v1/commitments/{id}/confirm/` | POST | PENDING_REVIEW → ACTIVE |
 | `/api/v1/commitments/{id}/reject/` | POST | → CANCELLED + logs ExtractionFeedback |
 | `/api/v1/commitments/{id}/escalate/` | POST | → ESCALATED + EscalationEvent; accepts `{message}` |
-| `/api/v1/commitments/{id}/resolve/` | POST | `{outcome: delivered\|deferred\|cancelled, note?, new_deadline?}` |
+| `/api/v1/commitments/{id}/resolve/` | POST | `{outcome: done\|deferred\|cancelled, note?, new_deadline?}` |
+| `/api/v1/commitments/{id}/reopen/` | POST | Reopen a closed (done/deferred/cancelled) commitment → ACTIVE |
 | `/api/v1/commitments/{id}/nudge/` | POST | Send Slack deadline nudge to the commitment owner right now |
+| `/api/v1/commitments/{id}/history/` | GET | Unified audit log: status changes, field edits, nudges, escalations — newest first |
 | **Tags** | | |
 | `/api/v1/tags/` | GET | Tag autocomplete ranked by usage; `?q=` for prefix filter |
 | **Persons** | | |
 | `/api/v1/persons/` | GET | List org participants |
+| `/api/v1/persons/` | POST | Create a new person in the org (`{name, email?, role?}`) |
 | `/api/v1/persons/{id}/` | GET | Person detail + delivery stats + meeting lineage |
+| `/api/v1/persons/{id}/` | PATCH | Update name, email, or role |
 | `/api/v1/persons/{id}/timeline/` | GET | Chronological meeting history with commitments + topics |
 | `/api/v1/persons/{id}/topics/` | GET | Topic frequency list `[{label, count, last_seen}]` |
 | `/api/v1/persons/{id}/link-slack/` | POST | Link Slack user ID to this person |
+| `/api/v1/persons/merge/` | POST | Deduplicate persons: `{primary_id, duplicate_ids[]}` — reassigns all commitments, meetings, events to primary |
 | **Slack** | | |
 | `/api/v1/slack/status/` | GET | Is org's Slack connected? Returns `{connected, workspace_id, workspace_name}` |
 | `/api/v1/slack/test-message/` | POST | Send a test DM to the requesting user's linked Slack account |
@@ -316,6 +327,7 @@ lsof -i :3000      # check if dev server is running
 | F4 | Commitment detail — edit, actions, resolve, nudge, tag editor | ✓ Done |
 | F5 | Upload + extraction review — polling, bulk confirm, per-row review | ✓ Done |
 | F6 | Meetings list, People list, Settings (Org / Slack / Team) | ✓ Done |
+| W8 | API hardening — audit log, person CRUD/merge, meeting PATCH, participant mgmt, reopen, logout | ✓ Done |
 | F7 | Mobile polish, E2E tests, Vercel deploy | Next |
 | — | AWS deployment (Phase 3) | After deploy |
 

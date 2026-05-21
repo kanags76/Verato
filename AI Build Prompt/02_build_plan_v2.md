@@ -411,6 +411,39 @@ Endpoints: `confirm`, `reject`, `escalate`, `resolve` actions on commitments. `G
 
 ---
 
+### Week 8 — API Hardening (Frontend Integration) ✓ DONE
+
+**Goal:** Close gaps discovered during frontend integration; add audit trail, person management, and meeting participant management.
+
+**New endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/auth/logout/` | POST | Blacklist refresh token before clearing session → 204 |
+| `/api/v1/commitments/{id}/reopen/` | POST | Reopen closed commitment (done/deferred/cancelled) → active |
+| `/api/v1/commitments/{id}/history/` | GET | Unified audit log (CommitmentEvent + EscalationEvent), newest first |
+| `/api/v1/persons/` | POST | Create a new person in the org |
+| `/api/v1/persons/{id}/` | PATCH | Update person name, email, or role |
+| `/api/v1/persons/merge/` | POST | Deduplicate persons; reassign all related records to primary |
+| `/api/v1/meetings/{id}/` | PATCH | Update meeting title, date, meeting_type, or summary |
+| `/api/v1/meetings/{id}/participants/` | GET | List meeting participants with confirmed flag |
+| `/api/v1/meetings/{id}/add-participant/` | POST | Add person to meeting (existing or new) |
+| `/api/v1/meetings/{id}/remove-participant/` | POST | Remove person from meeting → 204 |
+| `/api/v1/meetings/{id}/link-participants/` | POST | Validate Gemini-detected participants |
+
+**Model additions:**
+- `CommitmentEvent` — append-only audit log; every action writes a row
+- `MeetingParticipant.confirmed` — False = Gemini auto-linked, True = user-validated
+- `Commitment.Status.DONE` — replaces `DELIVERED` (migration with RunPython backfill)
+- `PATCH /commitments/{id}/` — now also writes `normalised_text` and logs `field_edited` events
+
+**Extraction changes:**
+- Gemini now returns `participants` array (names of everyone who spoke)
+- Upload flow: Gemini runs immediately on upload (no gating); participants saved as `confirmed=False`
+- User reviews commitments AND participants independently (no forced sequence)
+
+---
+
 ### ✅ Phase 1 Backend Complete — All User Stories Covered
 
 **All APIs for all 7 user story epics are now built.** The frontend can be built against Swagger UI at `localhost:8000/api/schema/ui/` without any further backend changes needed.
@@ -505,10 +538,11 @@ AUTH (public — no JWT required)
   GET    /auth/invite/validate/     ?token= → {email, org_name}
   POST   /auth/token/               Login with email + password → JWT tokens
   POST   /auth/token/refresh/       Refresh expired access token
-  POST   /auth/token/blacklist/     Logout
 
 AUTH (requires JWT)
+  POST   /auth/logout/              Blacklist refresh token then clear session → 204
   POST   /auth/invite/              Admin sends invite email
+  GET    /auth/invitations/         List all sent invitations with status (admin only)
 
 ORG
   PATCH  /orgs/{id}/settings/       Update confidence_threshold, nudge_hours_before, digest_day, digest_hour
@@ -517,35 +551,48 @@ DASHBOARD
   GET    /dashboard/                {overdue, at_risk, on_track, total_active}
 
 MEETINGS
-  POST   /meetings/upload/          Upload transcript (async → 202)
-  GET    /meetings/{id}/status/     Poll processing status
-  GET    /meetings/{id}/            Detail — meeting_type, summary, topics[]
-  GET    /meetings/                 List all org meetings
-  POST   /meetings/import/          Upload prior commitments document (async → 202)
-  POST   /meetings/zoom/webhook/    Zoom webhook receiver (stretch)
+  POST   /meetings/upload/              Upload transcript (async → 202); Gemini extracts commitments + participants
+  GET    /meetings/{id}/status/         Poll processing status; returns participant_count + confirmed_count
+  GET    /meetings/{id}/                Detail — meeting_type, summary, topics[]
+  PATCH  /meetings/{id}/                Update title, occurred_at, meeting_type, or summary
+  GET    /meetings/                     List all org meetings
+  POST   /meetings/import/              Upload prior commitments document (async → 202)
+  GET    /meetings/{id}/participants/   List participants with confirmed flag + speaker_label
+  POST   /meetings/{id}/add-participant/     Add person to meeting ({person_id} or {person: {}})
+  POST   /meetings/{id}/remove-participant/  Remove person from meeting ({person_id}) → 204
+  POST   /meetings/{id}/link-participants/   Validate Gemini-detected participants (link/create/skip)
+  POST   /meetings/zoom/webhook/        Zoom webhook receiver (stretch)
 
 COMMITMENTS
   GET    /commitments/              List with filters:
                                     ?status= ?owner= ?priority= ?deadline_before= ?risk_gte=
-                                    ?source= ?tags__label=
+                                    ?source= ?tags__label= ?meeting=
   GET    /commitments/{id}/         Detail + escalations[] + tags[]
-  PATCH  /commitments/{id}/         Update owner, deadline, tags (writable), priority
-  POST   /commitments/bulk-confirm/    Confirm all PENDING_REVIEW; optional {min_confidence}
-  POST   /commitments/{id}/confirm/    PENDING_REVIEW → ACTIVE
-  POST   /commitments/{id}/reject/     → CANCELLED + log feedback signal
-  POST   /commitments/{id}/escalate/   → ESCALATED + EscalationEvent
-  POST   /commitments/{id}/resolve/    {outcome, note, new_deadline?}
-  POST   /commitments/{id}/nudge/      Send Slack deadline DM to owner now
+  PATCH  /commitments/{id}/         Update normalised_text, owner, deadline, priority, tags
+                                    All changes logged to CommitmentEvent (field_edited)
+  POST   /commitments/bulk-confirm/    Confirm all PENDING_REVIEW; optional {min_confidence, meeting}
+  POST   /commitments/{id}/confirm/    PENDING_REVIEW → ACTIVE; logs CommitmentEvent(confirmed)
+  POST   /commitments/{id}/reject/     → CANCELLED + log feedback signal; logs CommitmentEvent(rejected)
+  POST   /commitments/{id}/escalate/   → ESCALATED + EscalationEvent; logs CommitmentEvent(escalated)
+  POST   /commitments/{id}/resolve/    {outcome: done|deferred|cancelled, note?, new_deadline?}
+                                       logs CommitmentEvent(resolved)
+  POST   /commitments/{id}/reopen/     Reopen done/deferred/cancelled → active; logs CommitmentEvent(reopened)
+  POST   /commitments/{id}/nudge/      Send Slack deadline DM to owner now; logs CommitmentEvent(nudged)
+  GET    /commitments/{id}/history/    Unified audit log — CommitmentEvent + EscalationEvent, newest first
 
 TAGS
   GET    /tags/                     Tag autocomplete; ?q= prefix filter; ranked by usage
 
 PERSONS
   GET    /persons/                  List org participants
+  POST   /persons/                  Create a new person {name, email?, role?}
   GET    /persons/{id}/             Person detail + delivery rate + lineage
+  PATCH  /persons/{id}/             Update name, email, or role
   GET    /persons/{id}/timeline/    Chronological meetings + commitments
   GET    /persons/{id}/topics/      Tag frequency list
   POST   /persons/{id}/link-slack/  Set slack_user_id
+  POST   /persons/merge/            Deduplicate: {primary_id, duplicate_ids[]}
+                                    Reassigns commitments, escalations, events, meeting participants to primary
 
 SLACK
   GET    /slack/status/             {connected, workspace_id, workspace_name}

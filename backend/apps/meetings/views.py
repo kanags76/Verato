@@ -24,6 +24,7 @@ from apps.accounts.views import get_user_org
     list=extend_schema(tags=['meetings'], summary='List org meetings'),
     retrieve=extend_schema(tags=['meetings'], summary='Meeting detail'),
     partial_update=extend_schema(tags=['meetings'], summary='Update meeting title, date, type, or summary'),
+    transcript=extend_schema(tags=['meetings'], summary='Raw transcript text for a meeting'),
     participants=extend_schema(tags=['meetings'], summary='List participants — confirmed and unconfirmed'),
     add_participant=extend_schema(
         tags=['meetings'],
@@ -50,6 +51,17 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Up
             .prefetch_related('topics')
             .order_by('-occurred_at')
         )
+
+    @action(detail=True, methods=['get'])
+    def transcript(self, request, pk=None):
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+        return Response({
+            'meeting_id':     str(meeting.id),
+            'title':          meeting.title,
+            'raw_transcript': meeting.raw_transcript,
+            'word_count':     meeting.word_count,
+        })
 
     @action(detail=True, methods=['get'])
     def participants(self, request, pk=None):

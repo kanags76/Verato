@@ -40,9 +40,13 @@ Organisation (plan: individual|team)
     │       ├── owner → Person
     │       ├── meeting → Meeting
     │       ├── tags → CommitmentTag (M2M — Week 3.5)
-    │       └── escalations → EscalationEvent
+    │       ├── escalations → EscalationEvent
+    │       └── events → CommitmentEvent (append-only audit log)
     │
     ├── EscalationEvent
+    │       └── commitment → Commitment
+    │
+    ├── CommitmentEvent (Week 8 — append-only audit log)
     │       └── commitment → Commitment
     │
     ├── ExtractionFeedback
@@ -265,6 +269,11 @@ class Meeting(models.Model):
 
 
 class MeetingParticipant(models.Model):
+    """
+    Through table for Meeting ↔ Person M2M.
+    speaker_label: the name as spoken in the transcript (e.g. "Sarah K.").
+    confirmed: False = auto-linked by Gemini, True = user-validated via link-participants.
+    """
     meeting       = models.ForeignKey(Meeting, on_delete=models.CASCADE)
     person        = models.ForeignKey(Person, on_delete=models.CASCADE)
     speaker_label = models.CharField(max_length=50, blank=True)
@@ -316,8 +325,9 @@ class Commitment(models.Model):
     """
     THE core entity of the system.
     Lifecycle: PENDING_REVIEW → ACTIVE → AT_RISK → ESCALATED
-                                    ↘              ↘ DELIVERED / DEFERRED / CANCELLED
+                                    ↘              ↘ DONE / DEFERRED / CANCELLED
     risk_score recomputed daily by Celery. Tags are the knowledge graph edges.
+    Every status change and field edit is logged to CommitmentEvent.
     """
     class CommitType(models.TextChoices):
         EXPLICIT = 'explicit', 'Explicit'
@@ -327,7 +337,7 @@ class Commitment(models.Model):
         ACTIVE         = 'active',         'Active'
         AT_RISK        = 'at_risk',        'At Risk'
         ESCALATED      = 'escalated',      'Escalated'
-        DELIVERED      = 'delivered',      'Delivered'
+        DONE           = 'done',           'Done'
         DEFERRED       = 'deferred',       'Deferred'
         CANCELLED      = 'cancelled',      'Cancelled'
 
@@ -417,6 +427,37 @@ class ExtractionFeedback(models.Model):
     class Meta:
         db_table = 'commitments_extractionfeedback'
         ordering = ['-created_at']
+
+
+class CommitmentEvent(models.Model):
+    """
+    Append-only audit log for every action on a commitment.
+    Written by views on every confirm, reject, resolve, reopen, escalate, nudge, and PATCH.
+    old_value / new_value are JSON snapshots for field_edited events.
+    Never deleted — this is the source of truth for history.
+    """
+    class EventType(models.TextChoices):
+        CONFIRMED    = 'confirmed',    'Confirmed'
+        REJECTED     = 'rejected',     'Rejected'
+        RESOLVED     = 'resolved',     'Resolved'
+        REOPENED     = 'reopened',     'Reopened'
+        ESCALATED    = 'escalated',    'Escalated'
+        NUDGED       = 'nudged',       'Nudge sent'
+        FIELD_EDITED = 'field_edited', 'Fields edited'
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    commitment  = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='events')
+    event_type  = models.CharField(max_length=30, choices=EventType.choices)
+    actor       = models.ForeignKey(Person, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='commitment_events')
+    old_value   = models.JSONField(null=True, blank=True)
+    new_value   = models.JSONField(null=True, blank=True)
+    note        = models.TextField(blank=True)
+    occurred_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'commitments_commitmentevent'
+        ordering = ['-occurred_at']
 ```
 
 ---
@@ -486,7 +527,7 @@ def compute_risk_score(commitment) -> float:
 
 def score_to_status(score: float, deadline, current_status: str) -> str:
     """Determine new status from score and deadline."""
-    closed = {'delivered', 'deferred', 'cancelled'}
+    closed = {'done', 'deferred', 'cancelled'}
     if deadline and deadline < date.today() and current_status not in closed:
         return 'escalated'   # overdue always escalates
     if score >= 0.90:
@@ -650,10 +691,11 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `meetings_meetingparticipant` | Through table for Meeting ↔ Person |
 | `meetings_meetingtopic` | Topics per meeting extracted by Gemini |
 | `commitments_commitmenttag` | Org-scoped tag vocabulary; get_or_create on save |
-| `commitments_commitment` | Core entity; status machine; risk_score daily |
+| `commitments_commitment` | Core entity; status machine; risk_score daily; `done` replaces `delivered` |
 | `commitments_commitment_tags` | M2M join — ~2 tags per commitment |
 | `commitments_escalationevent` | Immutable log; Method=AUTO for Celery escalations |
 | `commitments_extractionfeedback` | Every confirm/reject; Phase 2 calibration input |
+| `commitments_commitmentevent` | Append-only audit log; every action + field edit written here |
 | `notifications_nudgelog` | One record per nudge sent; enforces 20h cooldown |
 
 **Deferred to Phase 2:**
@@ -675,8 +717,12 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `accounts/0003_plan_admin_invitation` | Organisation.plan, User.is_org_admin, Invitation model |
 | `meetings/0001_initial` | Meeting, MeetingParticipant |
 | `meetings/0002_meeting_type_summary` | Meeting.meeting_type, Meeting.summary, MeetingTopic |
+| `meetings/0003_meeting_pending_participants_status` | ProcessingStatus.PENDING_PARTICIPANTS choice |
 | `commitments/0001_initial` | Commitment, EscalationEvent, ExtractionFeedback |
 | `commitments/0002_tags` | CommitmentTag, Commitment.tags M2M |
+| `commitments/0003_priority` | Commitment.priority field (high/medium/low) |
+| `commitments/0004_commitment_status_done` | Rename status `delivered` → `done`; RunPython data backfill |
+| `commitments/0005_commitmentevent` | CommitmentEvent audit log model |
 | `notifications/0001_initial` | NudgeLog |
 
 ### No pgvector in MVP

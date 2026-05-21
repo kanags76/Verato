@@ -45,7 +45,7 @@ class DashboardView(APIView):
         ).aggregate(
             overdue=Count('id', filter=Q(deadline__lt=today)),
             at_risk=Count('id', filter=Q(risk_score__gte=0.7, deadline__gte=today)),
-            on_track=Count('id', filter=Q(risk_score__lt=0.7)),
+            on_track=Count('id', filter=Q(risk_score__lt=0.7, deadline__gte=today) | Q(deadline__isnull=True)),
             total_active=Count('id'),
         )
         return Response(summary)

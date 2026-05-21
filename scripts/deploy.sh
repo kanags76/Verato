@@ -13,4 +13,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 echo "=== Running migrations ==="
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py migrate
 
+echo "=== Reloading nginx ==="
+docker compose --env-file .env.production -f docker-compose.prod.yml restart nginx
+
 echo "=== Deploy complete ==="
