@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Person
 from apps.commitments.models import Commitment, CommitmentTag
-from apps.meetings.models import Meeting, MeetingTopic
+from apps.meetings.models import Meeting, MeetingTopic, MeetingParticipant
 from extraction.extractor import extract_commitments
 from extraction.importer import extract_from_document
 
