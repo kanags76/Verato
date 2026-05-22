@@ -275,6 +275,9 @@ class MeetingUploadView(APIView):
             word_count=len(transcript.split()),
             processing_status=Meeting.ProcessingStatus.PENDING,
         )
+        if data.get('file'):
+            meeting.source_file = data['file']
+            meeting.save(update_fields=['source_file'])
 
         process_meeting.delay(str(meeting.id))
 
@@ -395,6 +398,9 @@ class MeetingImportView(APIView):
             word_count=len(text.split()),
             processing_status=Meeting.ProcessingStatus.PENDING,
         )
+        if data.get('file'):
+            meeting.source_file = data['file']
+            meeting.save(update_fields=['source_file'])
 
         process_import.delay(str(meeting.id))
 

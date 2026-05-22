@@ -54,6 +54,7 @@ class Meeting(models.Model):
     )
 
     raw_transcript = models.TextField(blank=True)
+    source_file    = models.FileField(upload_to='meeting_files/', null=True, blank=True)
     word_count     = models.IntegerField(default=0)
 
     processing_status = models.CharField(

@@ -29,6 +29,8 @@ class MeetingSerializer(serializers.ModelSerializer):
     commitment_count = serializers.SerializerMethodField()
     pending_count    = serializers.SerializerMethodField()
 
+    source_file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Meeting
         fields = [
@@ -36,13 +38,21 @@ class MeetingSerializer(serializers.ModelSerializer):
             'meeting_type', 'summary', 'topics',
             'processing_status', 'processed_at', 'processing_error',
             'word_count', 'external_id', 'external_url', 'created_at',
-            'commitment_count', 'pending_count',
+            'commitment_count', 'pending_count', 'source_file_url',
         ]
         read_only_fields = [
             'id', 'processing_status', 'processed_at',
             'processing_error', 'word_count', 'created_at',
-            'topics', 'commitment_count', 'pending_count',
+            'topics', 'commitment_count', 'pending_count', 'source_file_url',
         ]
+
+    def get_source_file_url(self, obj):
+        if not obj.source_file:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.source_file.url)
+        return obj.source_file.url
 
     def get_commitment_count(self, obj):
         return obj.commitments.count()
