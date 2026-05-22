@@ -1,5 +1,21 @@
 from rest_framework import serializers
-from .models import Meeting, MeetingTopic
+from .models import Meeting, MeetingClarification, MeetingTopic
+
+
+class ClarificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeetingClarification
+        fields = ['id', 'question', 'context', 'answer', 'answered_at', 'order']
+        read_only_fields = ['id', 'question', 'context', 'answered_at', 'order']
+
+
+class ClarificationAnswerSerializer(serializers.Serializer):
+    id     = serializers.UUIDField()
+    answer = serializers.CharField(allow_blank=False)
+
+
+class SubmitClarificationsSerializer(serializers.Serializer):
+    answers = ClarificationAnswerSerializer(many=True, min_length=1)
 
 
 class MeetingTopicSerializer(serializers.ModelSerializer):

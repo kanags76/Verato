@@ -444,6 +444,30 @@ Endpoints: `confirm`, `reject`, `escalate`, `resolve` actions on commitments. `G
 
 ---
 
+### Week 9 — Production Hardening ✓ DONE
+
+**Goal:** Fix production issues discovered during first live use of the deployed backend.
+
+**Fixes and additions:**
+
+| Area | Change |
+|---|---|
+| Slack OAuth | `?auth=<JWT>` query param always checked first — browser session cookies for wrong user were bypassing JWT |
+| New endpoint | `GET /auth/me/` — returns current user profile + org (`{id, email, name, is_org_admin, organisation}`) |
+| Upload | `occurred_at` now optional on `MeetingUploadSerializer` — defaults to `timezone.now()` if omitted |
+| Upload | `request.FILES` explicitly merged into `request.data` — axios Content-Type boundary handling was losing files |
+| Gemini | `GEMINI_API_KEY` now read via `config()` in `settings/base.py` — `getattr(settings, 'GEMINI_API_KEY', None)` was always returning `None` causing EC2 to fall back to ADC (which doesn't exist on EC2) |
+| Admin | Django admin pipeline status dashboard at `/admin/meetings/meeting/pipeline-status/` — Redis queue depths, status counts, stuck meetings, recent failures, reprocess/mark-failed actions |
+| Admin | `PipelineStatus` proxy model adds a sidebar link in the MEETINGS section |
+
+**New endpoint:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/auth/me/` | GET | Current user + org — used by frontend on every page load to confirm session and get org context |
+
+---
+
 ### ✅ Phase 1 Backend Complete — All User Stories Covered
 
 **All APIs for all 7 user story epics are now built.** The frontend can be built against Swagger UI at `localhost:8000/api/schema/ui/` without any further backend changes needed.
@@ -540,6 +564,7 @@ AUTH (public — no JWT required)
   POST   /auth/token/refresh/       Refresh expired access token
 
 AUTH (requires JWT)
+  GET    /auth/me/                  Current user profile + org {id, email, name, is_org_admin, organisation}
   POST   /auth/logout/              Blacklist refresh token then clear session → 204
   POST   /auth/invite/              Admin sends invite email
   GET    /auth/invitations/         List all sent invitations with status (admin only)
@@ -598,7 +623,7 @@ SLACK
   GET    /slack/status/             {connected, workspace_id, workspace_name}
   POST   /slack/test-message/       Send test DM to requesting user's Slack
   POST   /slack/actions/            Slack interactive button handler
-  GET    /slack/oauth/start/        Redirect to Slack OAuth (authenticated only)
+  GET    /slack/oauth/start/        Redirect to Slack OAuth — accepts ?auth=<JWT> for browser-redirect flows
   GET    /slack/oauth/callback/     OAuth callback — save per-org token
 ```
 

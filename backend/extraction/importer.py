@@ -1,7 +1,7 @@
 import logging
 
-from google import genai
 from django.conf import settings
+from google import genai
 
 from .prompt_builder import build_import_prompt
 from .parser import parse_extraction_response
@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_client() -> genai.Client:
+    api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    if api_key:
+        return genai.Client(api_key=api_key)
     return genai.Client(
         vertexai=True,
         project=settings.GOOGLE_CLOUD_PROJECT,
@@ -20,18 +23,10 @@ def _get_client() -> genai.Client:
 def extract_from_document(text: str) -> dict:
     """
     Extract commitments from a prior-commitments document via Gemini.
-
-    Returns a dict:
-      {
-        "commitments":  list[dict],   commitment objects with source='import' and tags[]
-        "topics":       list[dict],   always [] for import documents
-        "meeting_type": str,          always "other" for import documents
-        "summary":      str,          always "" for import documents
-      }
-
     Returns empty defaults on empty input or Gemini failure — never raises.
     """
-    _empty = {"commitments": [], "topics": [], "meeting_type": "other", "summary": ""}
+    _empty = {"commitments": [], "topics": [], "meeting_type": "other",
+              "summary": "", "participants": [], "clarifications": []}
 
     if not text or not text.strip():
         return _empty

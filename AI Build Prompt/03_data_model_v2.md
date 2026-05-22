@@ -4,7 +4,7 @@
 > **ORM:** Django 6.x
 > **Multi-tenancy:** All models scoped to `Organisation` via FK
 > **MVP scope:** No pgvector, no embeddings, no Conflict model, no OrgCalibration model
-> **Phase 1 complete:** All models built, migrated, tested — 264 tests passing
+> **Phase 1 complete:** All models built, migrated, tested — 326 tests passing
 > **Phase 2 additions noted inline** — schema is designed to accept them without breaking changes
 
 ---
@@ -34,7 +34,8 @@ Organisation (plan: individual|team)
     │
     ├── Meeting (one per transcript upload or import session)
     │       ├── MeetingParticipant
-    │       └── MeetingTopic (Week 3.5 — thematic topics per meeting)
+    │       ├── MeetingTopic (Week 3.5 — thematic topics per meeting)
+    │       └── PipelineStatus (Week 9 — proxy model; admin sidebar link only, no extra table)
     │
     ├── Commitment  ◄─── core entity
     │       ├── owner → Person
@@ -250,7 +251,7 @@ class Meeting(models.Model):
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meetings')
     title        = models.CharField(max_length=500)
     platform     = models.CharField(max_length=20, choices=Platform.choices, default=Platform.UPLOAD)
-    occurred_at  = models.DateTimeField()
+    occurred_at  = models.DateTimeField()  # optional on upload — serializer defaults to timezone.now()
     meeting_type = models.CharField(max_length=20, choices=MeetingType.choices, default=MeetingType.OTHER, blank=True)
     summary      = models.TextField(blank=True)
     participants = models.ManyToManyField(Person, through='MeetingParticipant', related_name='meetings')
@@ -295,6 +296,15 @@ class MeetingTopic(models.Model):
 
     class Meta:
         db_table = 'meetings_meetingtopic'
+
+
+class PipelineStatus(Meeting):
+    """Week 9 — proxy model. No extra DB table. Used only to add a Pipeline Status
+    sidebar link in Django admin that redirects to the custom pipeline status view."""
+    class Meta:
+        proxy               = True
+        verbose_name        = 'Pipeline Status'
+        verbose_name_plural = '⚙ Pipeline Status'
 ```
 
 ---
@@ -718,6 +728,7 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `meetings/0001_initial` | Meeting, MeetingParticipant |
 | `meetings/0002_meeting_type_summary` | Meeting.meeting_type, Meeting.summary, MeetingTopic |
 | `meetings/0003_meeting_pending_participants_status` | ProcessingStatus.PENDING_PARTICIPANTS choice |
+| `meetings/0004_add_pipelinestatus_proxy` | PipelineStatus proxy model (Week 9 — no new table) |
 | `commitments/0001_initial` | Commitment, EscalationEvent, ExtractionFeedback |
 | `commitments/0002_tags` | CommitmentTag, Commitment.tags M2M |
 | `commitments/0003_priority` | Commitment.priority field (high/medium/low) |

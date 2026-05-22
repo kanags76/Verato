@@ -27,7 +27,7 @@ Acceptance criteria
 - Back button returns to plan picker (preserving plan)
 - Submit shows "Creating account…" loading state then auto-advances to onboarding
 - Error states are inline per-field, not in a banner
-API needs: ✅ POST /api/v1/auth/register/ · ✅ org_name + plan in payload · ✅ is_first_login flag in response · 🆕 email verification endpoints
+API needs: ✅ POST /api/v1/auth/register/ · ✅ org_name + plan in payload · ✅ is_first_login flag in response · ✅ GET /api/v1/auth/me/ (Week 9 — session check + org context on every page load) · 🆕 email verification endpoints
 
 ## US-1.3 — Connect Slack during onboarding
 As a: CoS
@@ -40,7 +40,7 @@ Acceptance criteria
 - "Add to Slack" CTA in Slack-purple branding
 - "Skip for now — connect later from Settings" option
 - Skip and connect both route forward to the Import step
-API needs: ✅ GET /api/v1/integrations/slack/oauth-url/ · ✅ OAuth callback · ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/
+API needs: ✅ GET /api/v1/slack/oauth/start/?auth=<JWT> (Week 9 — JWT param ensures correct user when browser session cookie is stale) · ✅ OAuth callback · ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/
 
 ## US-1.4 — Import my existing tracker
 As a: CoS

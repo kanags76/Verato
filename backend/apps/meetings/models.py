@@ -18,11 +18,12 @@ class Meeting(models.Model):
         IMPORT = 'import', 'Prior Commitments Import'
 
     class ProcessingStatus(models.TextChoices):
-        PENDING_PARTICIPANTS = 'pending_participants', 'Awaiting Participant Validation'
-        PENDING              = 'pending',              'Pending'
-        PROCESSING           = 'processing',           'Processing'
-        COMPLETE             = 'complete',             'Complete'
-        FAILED               = 'failed',               'Failed'
+        PENDING_PARTICIPANTS  = 'pending_participants',  'Awaiting Participant Validation'
+        PENDING               = 'pending',               'Pending'
+        PROCESSING            = 'processing',            'Processing'
+        PENDING_CLARIFICATION = 'pending_clarification', 'Awaiting Clarification'
+        COMPLETE              = 'complete',              'Complete'
+        FAILED                = 'failed',                'Failed'
 
     class MeetingType(models.TextChoices):
         LEADERSHIP = 'leadership', 'Leadership / Exec'
@@ -56,7 +57,7 @@ class Meeting(models.Model):
     word_count     = models.IntegerField(default=0)
 
     processing_status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=ProcessingStatus.choices,
         default=ProcessingStatus.PENDING
     )
@@ -120,6 +121,27 @@ class MeetingTopic(models.Model):
             models.Index(fields=['meeting']),
         ]
 
+
+
+class MeetingClarification(models.Model):
+    """
+    A question Gemini raised during Pass 1 extraction that the CoS must answer
+    before Pass 2 (final commitment extraction) can run.
+    """
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    meeting     = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name='clarifications')
+    question    = models.TextField()
+    context     = models.TextField(blank=True)
+    answer      = models.TextField(blank=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    order       = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'meetings_meetingclarification'
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Q{self.order + 1} for {self.meeting.title}"
 
 
 class PipelineStatus(Meeting):

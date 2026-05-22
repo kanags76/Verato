@@ -120,7 +120,7 @@ def parse_extraction_response(text: str) -> dict:
     """
     _empty = {
         "commitments": [], "topics": [], "meeting_type": "other", "summary": "",
-        "participants": [],
+        "participants": [], "clarifications": [],
     }
 
     if not text or not text.strip():
@@ -137,11 +137,12 @@ def parse_extraction_response(text: str) -> dict:
     # Backward compat: bare array → treat as commitments, empty graph metadata
     if isinstance(data, list):
         return {
-            "commitments":  _apply_commitment_defaults(data),
-            "topics":        [],
-            "meeting_type":  "other",
-            "summary":       "",
-            "participants":  [],
+            "commitments":    _apply_commitment_defaults(data),
+            "topics":         [],
+            "meeting_type":   "other",
+            "summary":        "",
+            "participants":   [],
+            "clarifications": [],
         }
 
     if not isinstance(data, dict):
@@ -183,10 +184,23 @@ def parse_extraction_response(text: str) -> dict:
     if isinstance(raw_participants, list):
         participants = [str(p).strip() for p in raw_participants if p and str(p).strip()]
 
+    # Parse clarifications
+    raw_clarifications = data.get("clarifications", [])
+    clarifications = []
+    if isinstance(raw_clarifications, list):
+        for c in raw_clarifications:
+            if not isinstance(c, dict):
+                continue
+            question = str(c.get("question", "")).strip()
+            context  = str(c.get("context", "")).strip()
+            if question:
+                clarifications.append({"question": question, "context": context})
+
     return {
-        "commitments":  _apply_commitment_defaults(raw_commitments),
-        "topics":        topics,
-        "meeting_type":  meeting_type,
-        "summary":       str(summary),
-        "participants":  participants,
+        "commitments":    _apply_commitment_defaults(raw_commitments),
+        "topics":         topics,
+        "meeting_type":   meeting_type,
+        "summary":        str(summary),
+        "participants":   participants,
+        "clarifications": clarifications,
     }

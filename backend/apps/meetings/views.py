@@ -8,14 +8,15 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
-from .models import Meeting, MeetingParticipant
+from .models import Meeting, MeetingClarification, MeetingParticipant
 from .serializers import (
     MeetingSerializer, MeetingStatusSerializer,
     MeetingUploadSerializer, MeetingImportSerializer,
     LinkParticipantsSerializer,
+    ClarificationSerializer, SubmitClarificationsSerializer,
 )
 from .parsers import extract_text_from_file
-from .tasks import process_meeting, process_import
+from .tasks import process_meeting, process_meeting_pass2, process_import
 from apps.accounts.models import Person
 from apps.accounts.views import get_user_org
 
@@ -26,6 +27,15 @@ from apps.accounts.views import get_user_org
     partial_update=extend_schema(tags=['meetings'], summary='Update meeting title, date, type, or summary'),
     transcript=extend_schema(tags=['meetings'], summary='Raw transcript text for a meeting'),
     reprocess=extend_schema(tags=['meetings'], summary='Re-queue extraction pipeline using the saved transcript'),
+    clarifications=extend_schema(
+        tags=['meetings'],
+        summary='Get clarification questions or submit answers',
+        description=(
+            'GET: returns questions Gemini raised before extraction could complete. '
+            'POST: submit all answers at once (body: {"answers": [{"id": "...", "answer": "..."}]}). '
+            'All questions must be answered. Queues pass-2 extraction and returns 202.'
+        ),
+    ),
     participants=extend_schema(tags=['meetings'], summary='List participants — confirmed and unconfirmed'),
     add_participant=extend_schema(
         tags=['meetings'],
@@ -80,6 +90,7 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Up
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        MeetingClarification.objects.filter(meeting=meeting).delete()
         meeting.processing_status = Meeting.ProcessingStatus.PENDING
         meeting.processing_error  = ''
         meeting.save(update_fields=['processing_status', 'processing_error'])
@@ -88,6 +99,49 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Up
             process_import.delay(str(meeting.id))
         else:
             process_meeting.delay(str(meeting.id))
+
+        return Response(
+            {'meeting_id': str(meeting.id), 'status': meeting.processing_status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=['get', 'post'])
+    def clarifications(self, request, pk=None):
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+
+        if request.method == 'GET':
+            qs = meeting.clarifications.order_by('order')
+            return Response(ClarificationSerializer(qs, many=True).data)
+
+        # POST — submit answers and queue pass-2
+        if meeting.processing_status != Meeting.ProcessingStatus.PENDING_CLARIFICATION:
+            return Response(
+                {'detail': 'Meeting is not awaiting clarification.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = SubmitClarificationsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        answers = {str(a['id']): a['answer'] for a in serializer.validated_data['answers']}
+
+        qs = list(meeting.clarifications.order_by('order'))
+        unanswered = [str(c.id) for c in qs if str(c.id) not in answers]
+        if unanswered:
+            return Response(
+                {'detail': 'All questions must be answered.', 'missing': unanswered},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now_ts = timezone.now()
+        for clarification in qs:
+            clarification.answer      = answers[str(clarification.id)]
+            clarification.answered_at = now_ts
+            clarification.save(update_fields=['answer', 'answered_at'])
+
+        meeting.processing_status = Meeting.ProcessingStatus.PROCESSING
+        meeting.save(update_fields=['processing_status'])
+        process_meeting_pass2.delay(str(meeting.id))
 
         return Response(
             {'meeting_id': str(meeting.id), 'status': meeting.processing_status},
@@ -367,11 +421,12 @@ class MeetingStatusView(APIView):
         meeting = get_object_or_404(Meeting, id=pk, organisation=org)
 
         return Response({
-            'meeting_id':        str(meeting.id),
-            'status':            meeting.processing_status,
-            'processed_at':      meeting.processed_at,
-            'processing_error':  meeting.processing_error or None,
-            'commitment_count':  meeting.commitments.count(),
-            'participant_count': MeetingParticipant.objects.filter(meeting=meeting).count(),
-            'confirmed_count':   MeetingParticipant.objects.filter(meeting=meeting, confirmed=True).count(),
+            'meeting_id':          str(meeting.id),
+            'status':              meeting.processing_status,
+            'processed_at':        meeting.processed_at,
+            'processing_error':    meeting.processing_error or None,
+            'commitment_count':    meeting.commitments.count(),
+            'clarification_count': meeting.clarifications.count(),
+            'participant_count':   MeetingParticipant.objects.filter(meeting=meeting).count(),
+            'confirmed_count':     MeetingParticipant.objects.filter(meeting=meeting, confirmed=True).count(),
         })

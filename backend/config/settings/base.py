@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'apps.commitments',
     'apps.notifications',
     'apps.analytics',
+    'apps.prompts',
 ]
 
 MIDDLEWARE = [

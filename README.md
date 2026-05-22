@@ -2,7 +2,7 @@
 
 Accountability layer for organisations. Extracts every commitment made in meetings, assigns it an owner, scores risk, and nudges before it slips.
 
-**Stack:** Django REST API · Next.js 16 · PostgreSQL 18 · Redis · Celery · Vertex AI (Gemini)
+**Stack:** Django REST API · Next.js 16 · PostgreSQL 18 · Redis · Celery · Gemini AI
 **Repo:** https://github.com/kanags76/Verato (private)
 
 ---
@@ -78,13 +78,7 @@ brew services start postgresql@18
 brew services start redis
 ```
 
-### Step 2 — (If Vertex AI ADC token has expired — once per day, ~1 hour TTL)
-
-```bash
-gcloud auth application-default login
-```
-
-### Step 3 — Open five terminal tabs and run one command in each
+### Step 2 — Open five terminal tabs and run one command in each
 
 **Tab 1 — Django API** (http://localhost:8000)
 ```bash
@@ -158,6 +152,7 @@ brew services stop redis
 | `http://localhost:8000/api/schema/redoc/` | ReDoc — clean API docs |
 | `http://localhost:8000/api/schema/` | Raw OpenAPI JSON |
 | `http://localhost:8000/__debug__/` | Django debug toolbar (local only) |
+| `http://localhost:8000/admin/meetings/meeting/pipeline-status/` | **Pipeline Status dashboard** — queue depths, stuck/failed meetings |
 
 ---
 
@@ -185,6 +180,7 @@ brew services stop redis
 | `/api/v1/auth/token/` | POST | Login with email + password → JWT tokens |
 | `/api/v1/auth/token/refresh/` | POST | Refresh JWT |
 | `/api/v1/auth/logout/` | POST | Logout — blacklists refresh token before clearing session |
+| `/api/v1/auth/me/` | GET | Current user profile + org (`{id, email, name, is_org_admin, organisation}`) |
 | **Org** | | |
 | `/api/v1/orgs/` | GET | List orgs accessible to current user |
 | `/api/v1/orgs/{id}/settings/` | PATCH | Update org settings: `confidence_threshold`, `nudge_hours_before`, `digest_day`, `digest_hour` |
@@ -229,7 +225,7 @@ brew services stop redis
 | `/api/v1/slack/status/` | GET | Is org's Slack connected? Returns `{connected, workspace_id, workspace_name}` |
 | `/api/v1/slack/test-message/` | POST | Send a test DM to the requesting user's linked Slack account |
 | `/api/v1/slack/actions/` | POST | Slack interactive button handler (Done/Delayed/Blocked) |
-| `/api/v1/slack/oauth/start/` | GET | Redirect to Slack OAuth consent (authenticated users only) |
+| `/api/v1/slack/oauth/start/` | GET | Redirect to Slack OAuth consent — accepts `?auth=<JWT>` for browser-redirect flows |
 | `/api/v1/slack/oauth/callback/` | GET | Slack OAuth callback — stores per-org bot token |
 
 ---
@@ -252,7 +248,7 @@ pytest -k "test_risk" -v
 pytest --cov=apps --cov=extraction --cov-report=html
 ```
 
-**Integration test note:** `--run-slow` tests call real Vertex AI Gemini. They require a valid ADC token (`gcloud auth application-default login`) and take ~30–60s per test.
+**Integration test note:** `--run-slow` tests call real Gemini. They require `GEMINI_API_KEY` set in `.env` and take ~30–60s per test.
 
 ---
 
@@ -263,7 +259,7 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | PostgreSQL | 18.3 | localhost:5432 | Homebrew (auto-start) |
 | Redis | 7.x | localhost:6379 | Homebrew (auto-start) |
 | Database | commitment_os | no password | Homebrew peer auth |
-| Vertex AI | Gemini 2.5 Flash Lite | GCP us-central1 | ADC (gcloud auth) |
+| Gemini AI | 2.5 Flash Lite | Google AI Studio | `GEMINI_API_KEY` (production) / ADC (local fallback) |
 
 pgvector is installed but not used until Phase 3 (conflict detection).
 
@@ -328,12 +324,14 @@ lsof -i :3000      # check if dev server is running
 | F5 | Upload + extraction review — polling, bulk confirm, per-row review | ✓ Done |
 | F6 | Meetings list, People list, Settings (Org / Slack / Team) | ✓ Done |
 | W8 | API hardening — audit log, person CRUD/merge, meeting PATCH, participant mgmt, reopen, logout | ✓ Done |
+| W9 | Production fixes — Slack OAuth JWT flow, `GET /auth/me/`, Gemini API key, upload file merge, Django admin pipeline dashboard | ✓ Done |
 | F7 | Mobile polish, E2E tests, Vercel deploy | Next |
 | — | AWS deployment (Phase 3) | After deploy |
 
 ```
 PHASE 1 — Local backend (Weeks 1–7)           ← COMPLETE (326 tests passing)
 PHASE 2 — Frontend (Next.js, Weeks F1–F6)     ← COMPLETE (running on localhost:3000)
+PHASE 2.5 — Production hardening (W9)         ← COMPLETE (live at api.verato.twocents.ai)
            Week F7 — polish + deploy           ← Next  →  see 06_phase2_frontend_build_plan.md
 PHASE 3 — Deploy to AWS ECS                   (after frontend deploy)
 ```
@@ -349,8 +347,9 @@ PHASE 3 — Deploy to AWS ECS                   (after frontend deploy)
 | `DJANGO_SECRET_KEY` | Always | Set |
 | `DB_*` | Always | Set — no password, Homebrew auth |
 | `REDIS_URL` | Always | Set — `redis://localhost:6379/0` |
-| `GOOGLE_CLOUD_PROJECT` | Week 1+ | Set — `verato` |
-| `GOOGLE_CLOUD_LOCATION` | Week 1+ | Set — `us-central1` |
+| `GEMINI_API_KEY` | Week 1+ | Google AI Studio API key — used in production and local dev |
+| `GOOGLE_CLOUD_PROJECT` | Optional | Only needed if using Vertex AI ADC as a local fallback |
+| `GOOGLE_CLOUD_LOCATION` | Optional | Only needed if using Vertex AI ADC as a local fallback |
 | `GEMINI_EXTRACTION_MODEL` | Week 1+ | Set — `gemini-2.5-flash-lite` |
 | `APP_BASE_URL` | Week 6.5+ | Frontend URL for invite links (default: `http://localhost:3000`) |
 | `SLACK_BOT_TOKEN` | Week 6+ | Global fallback bot token (per-org token overrides via OAuth) |
@@ -363,7 +362,7 @@ PHASE 3 — Deploy to AWS ECS                   (after frontend deploy)
 | `ZOOM_*` | Stretch | Placeholder |
 | AWS credentials | Phase 3 | Placeholder |
 
-**No `GEMINI_API_KEY`** — Vertex AI uses Application Default Credentials (ADC), not an API key. Run `gcloud auth application-default login` to authenticate.
+**`GEMINI_API_KEY`** — required for production. Get it from [aistudio.google.com](https://aistudio.google.com). Local dev falls back to Vertex AI ADC if the key is absent.
 
 ### Frontend — `frontend/.env.local` (gitignored — never commit)
 

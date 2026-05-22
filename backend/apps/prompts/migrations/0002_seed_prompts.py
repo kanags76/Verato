@@ -1,10 +1,6 @@
-import logging
+from django.db import migrations
 
-logger = logging.getLogger(__name__)
-
-# ── Hardcoded fallbacks (used if DB prompt is missing) ────────────────────────
-
-_TRANSCRIPT_EXTRACTION_FALLBACK = '''You are an expert at extracting explicit commitments and thematic topics from meeting transcripts.
+TRANSCRIPT_EXTRACTION = '''You are an expert at extracting explicit commitments and thematic topics from meeting transcripts.
 
 A commitment is when a specific person explicitly promises to deliver a specific thing by a specific time.
 
@@ -41,7 +37,7 @@ Return a single JSON object with exactly these top-level keys:
 
 "meeting_type" — one of: leadership, one_on_one, team, project, board, external, other
 
-"meeting_summary" — 2-3 sentence plain English summary of the meeting\'s key discussion and decisions
+"meeting_summary" — 2-3 sentence plain English summary of the meeting's key discussion and decisions
 
 "participants" — array of strings: the full name of every person who spoke in the transcript,
   in order of first appearance. Include everyone, even if they made no commitments.
@@ -64,7 +60,7 @@ If no commitments are found, return an empty "commitments" array but still popul
 Transcript:
 {transcript}'''
 
-_IMPORT_EXTRACTION_FALLBACK = '''You are an expert at extracting action items and commitments from documents.
+IMPORT_EXTRACTION = '''You are an expert at extracting action items and commitments from documents.
 
 The document below may be a Notion table export, a spreadsheet paste, an email thread, meeting notes,
 or a plain text list of action items. Extract every item that represents a clear, actionable commitment:
@@ -97,7 +93,7 @@ If no commitments are found, return an empty "commitments" array.
 Document:
 {text}'''
 
-_TRANSCRIPT_PASS2_FALLBACK = '''You are an expert at extracting explicit commitments from meeting transcripts.
+TRANSCRIPT_PASS2 = '''You are an expert at extracting explicit commitments from meeting transcripts.
 
 The meeting coordinator has resolved the following ambiguities. Use these answers when extracting commitments:
 
@@ -106,14 +102,14 @@ The meeting coordinator has resolved the following ambiguities. Use these answer
 A commitment is when a specific person explicitly promises to deliver a specific thing by a specific time.
 
 INCLUDE — clear explicit commitments:
-  "I\'ll send you the report by Friday."
+  "I'll send you the report by Friday."
   "Tom will have the hiring brief to HR by May 2nd."
-  "We\'ll complete the legal review before end of month."
+  "We'll complete the legal review before end of month."
 
 EXCLUDE — everything that is not an explicit commitment:
   General discussion, brainstorming, or ideas
   Questions, requests, or suggestions ("we should...", "someone ought to...")
-  Conditional statements ("if we get sign-off, we\'ll...")
+  Conditional statements ("if we get sign-off, we'll...")
   Status updates about already-completed actions
   Vague intentions with no clear owner or deliverable
 
@@ -147,65 +143,19 @@ Transcript:
 {transcript}'''
 
 
-def _load_prompt(name: str, fallback: str) -> str:
-    """Load prompt content from DB; fall back to hardcoded string on any error."""
-    try:
-        from apps.prompts.models import Prompt
-        return Prompt.objects.get(name=name).content
-    except Exception:
-        return fallback
+def seed_prompts(apps, schema_editor):
+    Prompt = apps.get_model('prompts', 'Prompt')
+    Prompt.objects.get_or_create(name='transcript_extraction', defaults={'content': TRANSCRIPT_EXTRACTION})
+    Prompt.objects.get_or_create(name='import_extraction',     defaults={'content': IMPORT_EXTRACTION})
+    Prompt.objects.get_or_create(name='transcript_pass2',      defaults={'content': TRANSCRIPT_PASS2})
 
 
-def _build_context(participants, meeting_title, meeting_date):
-    lines = []
-    if meeting_title:
-        lines.append(f"Meeting title: {meeting_title}")
-    if meeting_date:
-        lines.append(
-            f"Meeting date: {meeting_date}"
-            " (use this to resolve relative deadlines such as 'end of Thursday', 'next week', 'by Friday')"
-        )
-    lines.append(f"Participants: {', '.join(participants) if participants else 'unknown'}")
-    return "\n".join(lines)
+class Migration(migrations.Migration):
 
+    dependencies = [
+        ('prompts', '0001_initial'),
+    ]
 
-def build_transcript_prompt(
-    transcript: str,
-    participants: list[str],
-    meeting_title: str = "",
-    meeting_date: str = "",
-) -> str:
-    template = _load_prompt('transcript_extraction', _TRANSCRIPT_EXTRACTION_FALLBACK)
-    return template.format(
-        context=_build_context(participants, meeting_title, meeting_date),
-        transcript=transcript,
-    )
-
-
-def build_import_prompt(text: str) -> str:
-    template = _load_prompt('import_extraction', _IMPORT_EXTRACTION_FALLBACK)
-    return template.format(text=text)
-
-
-def build_pass2_prompt(
-    transcript: str,
-    participants: list[str],
-    meeting_title: str = "",
-    meeting_date: str = "",
-    clarifications: list[dict] = None,
-) -> str:
-    """Build Pass 2 prompt with answered clarifications injected as resolved context."""
-    clarifications = clarifications or []
-    lines = []
-    for c in clarifications:
-        lines.append(f"Q: {c['question']}")
-        lines.append(f"A: {c['answer']}")
-        lines.append("")
-    clarifications_block = "\n".join(lines).strip() or "(No clarifications were needed.)"
-
-    template = _load_prompt('transcript_pass2', _TRANSCRIPT_PASS2_FALLBACK)
-    return template.format(
-        clarifications_block=clarifications_block,
-        context=_build_context(participants, meeting_title, meeting_date),
-        transcript=transcript,
-    )
+    operations = [
+        migrations.RunPython(seed_prompts, migrations.RunPython.noop),
+    ]

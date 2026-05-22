@@ -8,7 +8,7 @@ from django.urls import path
 from django.utils.html import format_html
 from django.utils.timezone import now
 
-from .models import Meeting, MeetingParticipant, MeetingTopic, PipelineStatus
+from .models import Meeting, MeetingClarification, MeetingParticipant, MeetingTopic, PipelineStatus
 
 
 # ── Inlines ───────────────────────────────────────────────────────────────────
@@ -22,6 +22,14 @@ class MeetingTopicInline(admin.TabularInline):
     model  = MeetingTopic
     extra  = 0
     fields = ['label', 'confidence']
+
+
+class MeetingClarificationInline(admin.TabularInline):
+    model     = MeetingClarification
+    extra     = 0
+    fields    = ['order', 'question', 'context', 'answer', 'answered_at']
+    readonly_fields = ['order', 'question', 'context', 'answered_at']
+    ordering  = ['order']
 
 
 # ── Actions ───────────────────────────────────────────────────────────────────
@@ -71,7 +79,7 @@ class MeetingAdmin(admin.ModelAdmin):
     search_fields   = ['title', 'processing_error']
     readonly_fields = ['id', 'processed_at', 'created_at', 'word_count', 'commitment_count_display']
     actions         = [reprocess_meetings, mark_failed, reset_to_pending]
-    inlines         = [MeetingParticipantInline, MeetingTopicInline]
+    inlines         = [MeetingParticipantInline, MeetingTopicInline, MeetingClarificationInline]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -86,10 +94,11 @@ class MeetingAdmin(admin.ModelAdmin):
     @admin.display(description='Status', ordering='processing_status')
     def status_badge(self, obj):
         colours = {
-            'pending':    '#f59e0b',
-            'processing': '#3b82f6',
-            'complete':   '#10b981',
-            'failed':     '#ef4444',
+            'pending':                '#f59e0b',
+            'processing':             '#3b82f6',
+            'pending_clarification':  '#8b5cf6',
+            'complete':               '#10b981',
+            'failed':                 '#ef4444',
         }
         colour = colours.get(obj.processing_status, '#6b7280')
         return format_html(
