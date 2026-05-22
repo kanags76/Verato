@@ -25,6 +25,7 @@ from apps.accounts.views import get_user_org
     retrieve=extend_schema(tags=['meetings'], summary='Meeting detail'),
     partial_update=extend_schema(tags=['meetings'], summary='Update meeting title, date, type, or summary'),
     transcript=extend_schema(tags=['meetings'], summary='Raw transcript text for a meeting'),
+    reprocess=extend_schema(tags=['meetings'], summary='Re-queue extraction pipeline using the saved transcript'),
     participants=extend_schema(tags=['meetings'], summary='List participants — confirmed and unconfirmed'),
     add_participant=extend_schema(
         tags=['meetings'],
@@ -62,6 +63,36 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Up
             'raw_transcript': meeting.raw_transcript,
             'word_count':     meeting.word_count,
         })
+
+    @action(detail=True, methods=['post'])
+    def reprocess(self, request, pk=None):
+        org = get_user_org(request)
+        meeting = get_object_or_404(Meeting, id=pk, organisation=org)
+
+        if meeting.processing_status == Meeting.ProcessingStatus.PROCESSING:
+            return Response(
+                {'detail': 'Meeting is currently processing. Wait for it to finish first.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not meeting.raw_transcript:
+            return Response(
+                {'detail': 'No transcript saved for this meeting. Please re-upload the file.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        meeting.processing_status = Meeting.ProcessingStatus.PENDING
+        meeting.processing_error  = ''
+        meeting.save(update_fields=['processing_status', 'processing_error'])
+
+        if meeting.platform == Meeting.Platform.IMPORT:
+            process_import.delay(str(meeting.id))
+        else:
+            process_meeting.delay(str(meeting.id))
+
+        return Response(
+            {'meeting_id': str(meeting.id), 'status': meeting.processing_status},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @action(detail=True, methods=['get'])
     def participants(self, request, pk=None):
