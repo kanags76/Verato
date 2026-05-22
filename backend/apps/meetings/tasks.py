@@ -32,7 +32,8 @@ def _resolve_person(org, name: str):
     if person:
         return person
 
-    return Person.objects.create(organisation=org, name=name)
+    person, _ = Person.objects.get_or_create(organisation=org, name=name)
+    return person
 
 
 def _parse_deadline(date_str):
