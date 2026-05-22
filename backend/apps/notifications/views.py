@@ -220,36 +220,53 @@ def slack_oauth_start(request):
     return HttpResponseRedirect(f'https://slack.com/oauth/v2/authorize?{params}')
 
 
+def _close_window_response(message='', error=False):
+    colour = '#ef4444' if error else '#10b981'
+    html = f"""<!DOCTYPE html><html><head><title>Slack</title></head><body
+        style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;">
+        <div style="text-align:center;color:#f1f5f9;">
+            <p style="font-size:18px;color:{colour};">{message}</p>
+            <p style="color:#94a3b8;font-size:14px;">You can close this window.</p>
+        </div>
+        <script>window.close();</script>
+    </body></html>"""
+    return HttpResponse(html)
+
+
 @csrf_exempt
 def slack_oauth_callback(request):
     """
     Slack redirects here after the user authorises the app.
     Exchange the code for a bot token and persist it on the org.
     """
+    # User cancelled the Slack OAuth flow
+    if request.GET.get('error'):
+        return _close_window_response('Slack connection cancelled.')
+
     code  = request.GET.get('code', '')
     state = request.GET.get('state', '')
 
     if not code or not state:
-        return HttpResponse('Missing code or state.', status=400)
+        return _close_window_response('Missing code or state.', error=True)
 
     try:
         data   = signing.loads(state, salt='slack-oauth', max_age=600)
         org_id = data['org_id']
     except signing.BadSignature:
-        return HttpResponse('Invalid state parameter.', status=400)
+        return _close_window_response('Invalid state parameter.', error=True)
 
     try:
         from apps.accounts.models import Organisation
         org = Organisation.objects.get(id=org_id)
     except Organisation.DoesNotExist:
-        return HttpResponse('Organisation not found.', status=404)
+        return _close_window_response('Organisation not found.', error=True)
 
     client_id     = getattr(settings, 'SLACK_CLIENT_ID', '')
     client_secret = getattr(settings, 'SLACK_CLIENT_SECRET', '')
     redirect_uri  = getattr(settings, 'SLACK_OAUTH_REDIRECT_URI', '')
 
     if not client_id or not client_secret:
-        return HttpResponse('Slack OAuth not configured.', status=503)
+        return _close_window_response('Slack OAuth not configured.', error=True)
 
     try:
         from slack_sdk import WebClient
@@ -265,7 +282,7 @@ def slack_oauth_callback(request):
         workspace_name = resp['team']['name']
     except Exception as exc:
         logger.error("Slack OAuth callback failed: %s", exc)
-        return HttpResponse('Slack OAuth failed. Please try again.', status=502)
+        return _close_window_response('Slack connection failed. Please try again.', error=True)
 
     org.settings['slack_token']          = token
     org.settings['slack_workspace_id']   = workspace_id
@@ -273,4 +290,4 @@ def slack_oauth_callback(request):
     org.save(update_fields=['settings'])
 
     logger.info("Slack workspace %s connected to org %s", workspace_id, org.slug)
-    return HttpResponse('Slack connected! You can close this window.')
+    return _close_window_response('Slack connected successfully! ✓')
