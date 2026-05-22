@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.utils.html import format_html
+
+from apps.audit.helpers import DataAccessMixin
 from .models import Commitment, CommitmentTag, EscalationEvent, ExtractionFeedback
 
 
@@ -10,16 +13,26 @@ class EscalationEventInline(admin.TabularInline):
 
 
 @admin.register(Commitment)
-class CommitmentAdmin(admin.ModelAdmin):
-    list_display   = ['normalised_text_short', 'organisation', 'owner', 'status', 'risk_score', 'deadline', 'source']
+class CommitmentAdmin(DataAccessMixin, admin.ModelAdmin):
+    list_display   = ['commitment_text', 'organisation', 'owner_display', 'status', 'risk_score', 'deadline', 'source']
     list_filter    = ['organisation', 'status', 'source']
     search_fields  = ['normalised_text', 'raw_text']
     readonly_fields = ['created_at', 'updated_at', 'reviewed_at', 'resolved_at', 'risk_score']
     inlines        = [EscalationEventInline]
 
-    def normalised_text_short(self, obj):
+    _REDACTED = format_html('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
+
+    @admin.display(description='Commitment')
+    def commitment_text(self, obj):
+        if not self._has_grant(obj):
+            return self._REDACTED
         return obj.normalised_text[:80]
-    normalised_text_short.short_description = 'Commitment'
+
+    @admin.display(description='Owner')
+    def owner_display(self, obj):
+        if not self._has_grant(obj):
+            return '—'
+        return obj.owner
 
 
 @admin.register(CommitmentTag)

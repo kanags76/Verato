@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.notifications',
     'apps.analytics',
     'apps.prompts',
+    'apps.audit',
 ]
 
 MIDDLEWARE = [

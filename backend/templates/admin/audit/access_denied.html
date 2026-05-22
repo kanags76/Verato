@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width:600px;margin:40px auto;padding:32px;background:#1e293b;border:1px solid #334155;border-radius:12px;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+    <span style="font-size:32px;">🔒</span>
+    <div>
+      <h2 style="margin:0;color:#f1f5f9;font-size:20px;">Data Access Restricted</h2>
+      <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">
+        No active data access grant for <strong style="color:#e2e8f0;">{{ organisation }}</strong>
+      </p>
+    </div>
+  </div>
+
+  <p style="color:#cbd5e1;line-height:1.6;margin-bottom:24px;">
+    To view or edit data belonging to this organisation, you must first upload a
+    valid permission email or signed acknowledgement document.
+  </p>
+
+  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:16px;margin-bottom:24px;">
+    <p style="margin:0 0 8px;color:#60a5fa;font-weight:600;font-size:13px;">REQUIRED BEFORE ACCESS</p>
+    <ul style="margin:0;padding-left:20px;color:#94a3b8;font-size:14px;line-height:1.8;">
+      <li>Written permission from the organisation's account owner, or</li>
+      <li>A signed data access acknowledgement from your compliance team</li>
+    </ul>
+  </div>
+
+  <a href="{% url 'admin:audit_dataaccessgrant_add' %}?organisation={{ organisation.pk }}"
+     style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+    Upload Access Grant
+  </a>
+  &nbsp;
+  <a href="{% url 'admin:audit_dataaccessgrant_changelist' %}"
+     style="display:inline-block;color:#60a5fa;padding:10px 20px;text-decoration:none;font-size:14px;">
+    View All Grants
+  </a>
+</div>
+{% endblock %}

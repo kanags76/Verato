@@ -8,6 +8,7 @@ from django.urls import path
 from django.utils.html import format_html
 from django.utils.timezone import now
 
+from apps.audit.helpers import DataAccessMixin
 from .models import Meeting, MeetingClarification, MeetingParticipant, MeetingTopic, PipelineStatus
 
 
@@ -70,10 +71,10 @@ def reset_to_pending(modeladmin, request, queryset):
 # ── MeetingAdmin ──────────────────────────────────────────────────────────────
 
 @admin.register(Meeting)
-class MeetingAdmin(admin.ModelAdmin):
+class MeetingAdmin(DataAccessMixin, admin.ModelAdmin):
     list_display    = [
-        'title', 'organisation', 'platform', 'status_badge',
-        'word_count', 'commitment_count', 'age_minutes', 'error_snippet',
+        'title_display', 'organisation', 'platform', 'status_badge',
+        'word_count_display', 'commitment_count', 'age_minutes', 'error_snippet',
     ]
     list_filter     = ['organisation', 'platform', 'processing_status', 'meeting_type']
     search_fields   = ['title', 'processing_error']
@@ -90,6 +91,20 @@ class MeetingAdmin(admin.ModelAdmin):
         return custom + urls
 
     # ── List display helpers ──────────────────────────────────────────────────
+
+    _REDACTED = format_html('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
+
+    @admin.display(description='Title', ordering='title')
+    def title_display(self, obj):
+        if not self._has_grant(obj):
+            return self._REDACTED
+        return obj.title
+
+    @admin.display(description='Words', ordering='word_count')
+    def word_count_display(self, obj):
+        if not self._has_grant(obj):
+            return '—'
+        return obj.word_count
 
     @admin.display(description='Status', ordering='processing_status')
     def status_badge(self, obj):
@@ -108,6 +123,8 @@ class MeetingAdmin(admin.ModelAdmin):
 
     @admin.display(description='Commitments')
     def commitment_count(self, obj):
+        if not self._has_grant(obj):
+            return '—'
         return obj.commitments.count()
 
     @admin.display(description='Age (min)', ordering='created_at')
@@ -119,6 +136,8 @@ class MeetingAdmin(admin.ModelAdmin):
 
     @admin.display(description='Error')
     def error_snippet(self, obj):
+        if not self._has_grant(obj):
+            return '—'
         if not obj.processing_error:
             return '—'
         snippet = obj.processing_error[:80]
