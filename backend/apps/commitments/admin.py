@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 
 from apps.audit.helpers import DataAccessMixin
 from .models import Commitment, CommitmentTag, EscalationEvent, ExtractionFeedback
@@ -20,7 +20,7 @@ class CommitmentAdmin(DataAccessMixin, admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at', 'reviewed_at', 'resolved_at', 'risk_score']
     inlines        = [EscalationEventInline]
 
-    _REDACTED = format_html('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
+    _REDACTED = mark_safe('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
 
     @admin.display(description='Commitment')
     def commitment_text(self, obj):

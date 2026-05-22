@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.http import JsonResponse
 from django.urls import path
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.utils.timezone import now
 
 from apps.audit.helpers import DataAccessMixin
@@ -92,7 +92,7 @@ class MeetingAdmin(DataAccessMixin, admin.ModelAdmin):
 
     # ── List display helpers ──────────────────────────────────────────────────
 
-    _REDACTED = format_html('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
+    _REDACTED = mark_safe('<span style="color:#6b7280;font-style:italic">— redacted —</span>')
 
     @admin.display(description='Title', ordering='title')
     def title_display(self, obj):
