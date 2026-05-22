@@ -5,6 +5,9 @@ from .views import (
     slack_oauth_start,
     slack_status,
     slack_test_message,
+    slack_users_search,
+    slack_users_import,
+    slack_users_sync,
 )
 
 urlpatterns = [
@@ -13,4 +16,7 @@ urlpatterns = [
     path('slack/oauth/callback/', slack_oauth_callback,name='slack-oauth-callback'),
     path('slack/status/',         slack_status,        name='slack-status'),
     path('slack/test-message/',   slack_test_message,  name='slack-test-message'),
+    path('slack/users/',          slack_users_search,  name='slack-users-search'),
+    path('slack/users/import/',   slack_users_import,  name='slack-users-import'),
+    path('slack/users/sync/',     slack_users_sync,    name='slack-users-sync'),
 ]
