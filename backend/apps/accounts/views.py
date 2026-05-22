@@ -131,20 +131,19 @@ class RegisterView(APIView):
                 slug=slugify(data['org_name']),
                 plan=data['plan'],
             )
-            name_parts = data['name'].split(maxsplit=1)
             user = User.objects.create_user(
                 username=data['email'],
                 email=data['email'],
                 password=data['password'],
-                first_name=name_parts[0],
-                last_name=name_parts[1] if len(name_parts) > 1 else '',
+                first_name=data['first_name'],
+                last_name=data['last_name'],
                 organisation=org,
                 is_org_admin=True,
             )
             Person.objects.create(
                 organisation=org,
                 user=user,
-                name=data['name'],
+                name=f"{data['first_name']} {data['last_name']}".strip(),
                 email=data['email'],
             )
 
@@ -240,21 +239,20 @@ class AcceptInviteView(APIView):
         invite = Invitation.objects.select_related('organisation').get(token=data['token'])
         org = invite.organisation
 
-        name_parts = data['name'].split(maxsplit=1)
         with transaction.atomic():
             user = User.objects.create_user(
                 username=invite.email,
                 email=invite.email,
                 password=data['password'],
-                first_name=name_parts[0],
-                last_name=name_parts[1] if len(name_parts) > 1 else '',
+                first_name=data['first_name'],
+                last_name=data['last_name'],
                 organisation=org,
                 is_org_admin=False,
             )
             Person.objects.create(
                 organisation=org,
                 user=user,
-                name=data['name'],
+                name=f"{data['first_name']} {data['last_name']}".strip(),
                 email=invite.email,
             )
             invite.accepted_at = timezone.now()

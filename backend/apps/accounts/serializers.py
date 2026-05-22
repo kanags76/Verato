@@ -33,11 +33,12 @@ class OrganisationSerializer(serializers.ModelSerializer):
 # ── Auth serializers ──────────────────────────────────────────────────────────
 
 class RegisterSerializer(serializers.Serializer):
-    name     = serializers.CharField(max_length=255)
-    email    = serializers.EmailField()
-    password = serializers.CharField(min_length=8, write_only=True)
-    plan     = serializers.ChoiceField(choices=['individual', 'team'])
-    org_name = serializers.CharField(max_length=255)
+    first_name = serializers.CharField(max_length=150)
+    last_name  = serializers.CharField(max_length=150)
+    email      = serializers.EmailField()
+    password   = serializers.CharField(min_length=8, write_only=True)
+    plan       = serializers.ChoiceField(choices=['individual', 'team'])
+    org_name   = serializers.CharField(max_length=255)
 
     def validate_email(self, value):
         from .models import User
@@ -62,9 +63,10 @@ class InviteSerializer(serializers.Serializer):
 
 
 class AcceptInviteSerializer(serializers.Serializer):
-    token    = serializers.CharField()
-    name     = serializers.CharField(max_length=255)
-    password = serializers.CharField(min_length=8, write_only=True)
+    token      = serializers.CharField()
+    first_name = serializers.CharField(max_length=150)
+    last_name  = serializers.CharField(max_length=150)
+    password   = serializers.CharField(min_length=8, write_only=True)
 
     def validate_token(self, value):
         try:
