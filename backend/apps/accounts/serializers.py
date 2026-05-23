@@ -120,6 +120,23 @@ class PersonSerializer(serializers.ModelSerializer):
             'first_seen_at', 'meeting_count', 'recent_topics', 'created_at',
         ]
 
+    def validate_email(self, value):
+        if not value:
+            return value
+        request = self.context.get('request')
+        if request:
+            from apps.accounts.views import get_user_org
+            org = get_user_org(request)
+            if org:
+                qs = Person.objects.filter(organisation=org, email__iexact=value)
+                if self.instance:
+                    qs = qs.exclude(pk=self.instance.pk)
+                if qs.exists():
+                    raise serializers.ValidationError(
+                        'A person with this email already exists in your organisation.'
+                    )
+        return value
+
     def get_recent_topics(self, obj):
         from django.db.models import Count
         from apps.commitments.models import Commitment
