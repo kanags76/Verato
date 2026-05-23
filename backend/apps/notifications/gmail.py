@@ -119,7 +119,6 @@ def poll_reply_threads(org) -> list[dict]:
 
     nudge_logs = list(
         NudgeLog.objects
-        .filter(organisation__isnull=False)
         .filter(commitment__organisation=org)
         .filter(gmail_thread_id__gt='')
         .filter(nudged_at__gte=cutoff)
