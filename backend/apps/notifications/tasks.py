@@ -213,14 +213,18 @@ def _iter_orgs_with_email_users():
 
 def _generate_digest_intro(org_name, overdue, at_risk, on_track) -> str:
     try:
-        import google.generativeai as genai
-        model = genai.GenerativeModel(settings.GEMINI_EXTRACTION_MODEL)
+        from google import genai
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
         prompt = (
             f"Write a 2-3 sentence executive summary for {org_name}'s weekly commitment digest. "
             f"{len(overdue)} overdue, {len(at_risk)} at-risk, {len(on_track)} on-track. "
             f"Be concise and action-oriented. Plain text only."
         )
-        return model.generate_content(prompt).text.strip()
+        response = client.models.generate_content(
+            model=settings.GEMINI_EXTRACTION_MODEL,
+            contents=prompt,
+        )
+        return response.text.strip()
     except Exception as exc:
         logger.warning("Gemini digest intro failed: %s", exc)
         return (

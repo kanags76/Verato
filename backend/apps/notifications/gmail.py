@@ -202,20 +202,27 @@ def parse_reply_with_gemini(commitment_text: str, deadline_str: str, reply_body:
     Prompt is loaded from the DB (prompts.gmail_reply_parse) so it can be edited in admin.
     """
     try:
-        import google.generativeai as genai
-        model = genai.GenerativeModel(settings.GEMINI_EXTRACTION_MODEL)
+        from google import genai
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
         template = _load_prompt('gmail_reply_parse', _GMAIL_REPLY_PARSE_FALLBACK)
         prompt = template.format(
             commitment_text=commitment_text,
             deadline_str=deadline_str,
             reply_body=reply_body[:2000],
         )
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=settings.GEMINI_EXTRACTION_MODEL,
+            contents=prompt,
+        )
         text = response.text.strip()
-        if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
+        # Strip markdown code fences if present
+        if '```' in text:
+            parts = text.split('```')
+            for part in parts:
+                candidate = part.lstrip('json').strip()
+                if candidate.startswith('{'):
+                    text = candidate
+                    break
         return json.loads(text.strip())
     except Exception as exc:
         logger.error("Gemini reply parse failed: %s", exc)
