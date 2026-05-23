@@ -22,6 +22,61 @@ from apps.commitments.models import Commitment
 logger = logging.getLogger(__name__)
 
 
+# ── Nudge settings ────────────────────────────────────────────────────────────
+
+_VALID_FIRST_DAYS   = {1, 2, 5}
+_VALID_SECOND_HOURS = {24, 48, 72}
+
+
+@extend_schema(
+    tags=['slack'],
+    summary='Get or update org nudge timing settings',
+    description=(
+        'GET: returns current nudge schedule settings. '
+        'PATCH: update first_days_before (1/2/5) and/or second_hours_before (24/48/72).'
+    ),
+)
+@api_view(['GET', 'PATCH'])
+@drf_permission_classes([IsAuthenticated])
+def nudge_settings(request):
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'detail': 'User has no organisation.'}, status=403)
+
+    if request.method == 'PATCH':
+        data = request.data
+        org_settings = org.settings or {}
+
+        if 'first_days_before' in data:
+            val = int(data['first_days_before'])
+            if val not in _VALID_FIRST_DAYS:
+                return Response(
+                    {'detail': f'first_days_before must be one of {sorted(_VALID_FIRST_DAYS)}.'},
+                    status=400,
+                )
+            org_settings['nudge_first_days_before'] = val
+
+        if 'second_hours_before' in data:
+            val = int(data['second_hours_before'])
+            if val not in _VALID_SECOND_HOURS:
+                return Response(
+                    {'detail': f'second_hours_before must be one of {sorted(_VALID_SECOND_HOURS)}.'},
+                    status=400,
+                )
+            org_settings['nudge_second_hours_before'] = val
+
+        org.settings = org_settings
+        org.save(update_fields=['settings'])
+
+    org_settings = org.settings or {}
+    return Response({
+        'first_days_before':   org_settings.get('nudge_first_days_before', 2),
+        'second_hours_before': org_settings.get('nudge_second_hours_before', 48),
+        'post_due_days':       [1, 2, 3],
+        'escalate_cos_on_overdue': True,
+    })
+
+
 # ── Slack connection status ───────────────────────────────────────────────────
 
 @extend_schema(

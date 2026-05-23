@@ -8,6 +8,14 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+_NUDGE_HEADERS = {
+    'first_reminder':  '📅 *Reminder* — upcoming deadline',
+    'second_reminder': '⏰ *Heads up* — deadline approaching',
+    'overdue_1':       '⚠️ *Overdue* — was due yesterday',
+    'overdue_2':       '🔴 *Overdue* — 2 days past deadline',
+    'overdue_3':       '🚨 *Overdue* — 3 days past deadline',
+}
+
 
 def _get_client(org=None):
     """
@@ -27,10 +35,10 @@ def _get_client(org=None):
     return WebClient(token=token)
 
 
-def send_nudge_dm(slack_user_id: str, commitment) -> str | None:
+def send_nudge_dm(slack_user_id: str, commitment, nudge_type: str = 'first_reminder') -> str | None:
     """
-    Send a deadline nudge DM to the owner.
-    Returns the Slack channel id on success, None if Slack is not configured.
+    Send a nudge DM to the commitment owner.
+    nudge_type controls the header text. Returns Slack channel id or None.
     """
     org = getattr(commitment, 'organisation', None)
     client = _get_client(org=org)
@@ -38,16 +46,15 @@ def send_nudge_dm(slack_user_id: str, commitment) -> str | None:
         logger.info("Slack not configured — skipping nudge for commitment %s", commitment.id)
         return None
 
-    deadline_str = commitment.deadline.isoformat() if commitment.deadline else 'no deadline set'
+    deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'no deadline'
+    header = _NUDGE_HEADERS.get(nudge_type, '📋 *Commitment reminder*')
+
     blocks = [
         {
             'type': 'section',
             'text': {
                 'type': 'mrkdwn',
-                'text': (
-                    f"*Commitment reminder* — deadline {deadline_str}\n"
-                    f"_{commitment.normalised_text}_"
-                ),
+                'text': f"{header}\n*{commitment.normalised_text}*\nDeadline: {deadline_str}",
             },
         },
         {
@@ -63,7 +70,7 @@ def send_nudge_dm(slack_user_id: str, commitment) -> str | None:
                 },
                 {
                     'type': 'button',
-                    'text': {'type': 'plain_text', 'text': '⏰ Delayed'},
+                    'text': {'type': 'plain_text', 'text': '⏰ Need more time'},
                     'action_id': 'nudge_delayed',
                     'value': str(commitment.id),
                 },
@@ -82,25 +89,41 @@ def send_nudge_dm(slack_user_id: str, commitment) -> str | None:
         response = client.chat_postMessage(channel=slack_user_id, blocks=blocks)
         return response['channel']
     except Exception as exc:
-        logger.error("Slack DM failed for user %s: %s", slack_user_id, exc)
+        logger.error("Slack nudge DM failed for %s: %s", slack_user_id, exc)
         return None
 
 
-def notify_cos_escalation(commitment, cos_slack_user_id: str):
-    """Notify the CoS that a commitment has auto-escalated."""
+def send_cos_overdue_alert(commitment, cos_slack_user_id: str) -> None:
+    """Alert the CoS when a commitment becomes overdue."""
     org = getattr(commitment, 'organisation', None)
     client = _get_client(org=org)
     if client is None:
         return
 
+    owner_name = commitment.owner.name if commitment.owner else 'Unassigned'
+    deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'none'
+
     try:
         client.chat_postMessage(
             channel=cos_slack_user_id,
-            text=(
-                f"⚠️ *Auto-escalated* — {commitment.normalised_text[:120]}\n"
-                f"Owner: {commitment.owner.name if commitment.owner else 'unassigned'} | "
-                f"Deadline: {commitment.deadline or 'none'}"
-            ),
+            blocks=[
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            f"🚨 *Overdue commitment — action required*\n"
+                            f"*{commitment.normalised_text}*\n"
+                            f"Owner: {owner_name} | Deadline: {deadline_str}"
+                        ),
+                    },
+                },
+            ],
         )
     except Exception as exc:
-        logger.error("CoS escalation notify failed: %s", exc)
+        logger.error("CoS overdue alert failed: %s", exc)
+
+
+def notify_cos_escalation(commitment, cos_slack_user_id: str):
+    """Notify the CoS that a commitment has auto-escalated (legacy — kept for risk.py)."""
+    send_cos_overdue_alert(commitment, cos_slack_user_id)
