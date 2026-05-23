@@ -13,6 +13,7 @@ build/
 .env.*
 !.env.example
 !.env.production.template
+!.env.local.template
 
 # Certbot (certs live on the server, not in git)
 certbot/conf/
