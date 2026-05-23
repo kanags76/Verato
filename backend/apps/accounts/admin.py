@@ -10,8 +10,8 @@ class OrganisationAdminForm(forms.ModelForm):
 
     nudge_enabled = forms.BooleanField(
         required=False,
-        label='Enable automatic nudges',
-        help_text='When checked, Slack nudges will be sent daily at 09:00 UTC.',
+        label='Enable Slack nudges',
+        help_text='Send automatic Slack DMs to owners on the configured schedule (09:00 UTC daily).',
     )
     nudge_first_days_before = forms.ChoiceField(
         choices=FIRST_DAYS_CHOICES, required=False, initial=2,
@@ -23,6 +23,18 @@ class OrganisationAdminForm(forms.ModelForm):
         label='Second reminder',
         help_text='Hours before deadline to send the second nudge.',
     )
+    gmail_polling_enabled = forms.BooleanField(
+        required=False,
+        label='Enable Gmail reply polling',
+        help_text='Check Gmail nudge threads for owner replies and auto-update commitments.',
+    )
+    GMAIL_INTERVAL_CHOICES = [(15, 'Every 15 minutes'), (30, 'Every 30 minutes'),
+                              (60, 'Every hour'), (120, 'Every 2 hours')]
+    gmail_poll_interval_minutes = forms.ChoiceField(
+        choices=GMAIL_INTERVAL_CHOICES, required=False, initial=30,
+        label='Gmail poll frequency',
+        help_text='How often to check for email replies from owners.',
+    )
 
     class Meta:
         model  = Organisation
@@ -32,16 +44,20 @@ class OrganisationAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             s = self.instance.settings or {}
-            self.fields['nudge_enabled'].initial              = s.get('nudge_enabled', False)
-            self.fields['nudge_first_days_before'].initial    = s.get('nudge_first_days_before', 2)
-            self.fields['nudge_second_hours_before'].initial  = s.get('nudge_second_hours_before', 48)
+            self.fields['nudge_enabled'].initial             = s.get('nudge_enabled', False)
+            self.fields['nudge_first_days_before'].initial   = s.get('nudge_first_days_before', 2)
+            self.fields['nudge_second_hours_before'].initial = s.get('nudge_second_hours_before', 48)
+            self.fields['gmail_polling_enabled'].initial         = s.get('gmail_polling_enabled', False)
+            self.fields['gmail_poll_interval_minutes'].initial   = s.get('gmail_poll_interval_minutes', 30)
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         s = instance.settings or {}
-        s['nudge_enabled']            = bool(self.cleaned_data.get('nudge_enabled', False))
-        s['nudge_first_days_before']  = int(self.cleaned_data['nudge_first_days_before'])
+        s['nudge_enabled']             = bool(self.cleaned_data.get('nudge_enabled', False))
+        s['nudge_first_days_before']   = int(self.cleaned_data['nudge_first_days_before'])
         s['nudge_second_hours_before'] = int(self.cleaned_data['nudge_second_hours_before'])
+        s['gmail_polling_enabled']         = bool(self.cleaned_data.get('gmail_polling_enabled', False))
+        s['gmail_poll_interval_minutes']   = int(self.cleaned_data.get('gmail_poll_interval_minutes', 30))
         instance.settings = s
         if commit:
             instance.save()
@@ -51,21 +67,42 @@ class OrganisationAdminForm(forms.ModelForm):
 @admin.register(Organisation)
 class OrganisationAdmin(admin.ModelAdmin):
     form          = OrganisationAdminForm
-    list_display  = ['name', 'slug', 'slack_connected', 'nudges_enabled', 'nudge_first_days', 'nudge_second_hours', 'created_at']
+    list_display  = ['name', 'slug', 'slack_connected', 'gmail_connected',
+                     'nudges_enabled', 'gmail_polling', 'gmail_poll_interval',
+                     'nudge_first_days', 'nudge_second_hours', 'created_at']
     search_fields = ['name', 'slug']
     fieldsets = [
-        (None,           {'fields': ['name', 'slug']}),
-        ('Nudge Settings', {'fields': ['nudge_enabled', 'nudge_first_days_before', 'nudge_second_hours_before'],
-                            'description': 'Post-due nudges (day +1, +2, +3) and CoS escalation on day +1 are always active.'}),
+        (None, {'fields': ['name', 'slug']}),
+        ('Slack Nudges', {
+            'fields': ['nudge_enabled', 'nudge_first_days_before', 'nudge_second_hours_before'],
+            'description': 'Post-due nudges (day +1, +2, +3) and CoS escalation on day +1 are always active when enabled.',
+        }),
+        ('Gmail', {
+            'fields': ['gmail_polling_enabled', 'gmail_poll_interval_minutes'],
+            'description': 'Gmail must be connected by the org via OAuth before polling will work.',
+        }),
     ]
 
     @admin.display(description='Slack', boolean=True)
     def slack_connected(self, obj):
         return bool((obj.settings or {}).get('slack_token'))
 
-    @admin.display(description='Nudges', boolean=True)
+    @admin.display(description='Gmail', boolean=True)
+    def gmail_connected(self, obj):
+        return bool((obj.settings or {}).get('gmail_refresh_token'))
+
+    @admin.display(description='Slack nudges', boolean=True)
     def nudges_enabled(self, obj):
         return bool((obj.settings or {}).get('nudge_enabled', False))
+
+    @admin.display(description='Gmail polling', boolean=True)
+    def gmail_polling(self, obj):
+        return bool((obj.settings or {}).get('gmail_polling_enabled', False))
+
+    @admin.display(description='Poll every')
+    def gmail_poll_interval(self, obj):
+        mins = (obj.settings or {}).get('gmail_poll_interval_minutes', 30)
+        return f'{mins} min' if mins < 60 else f'{mins // 60}h'
 
     @admin.display(description='1st nudge')
     def nudge_first_days(self, obj):

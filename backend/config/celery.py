@@ -23,6 +23,6 @@ app.conf.beat_schedule = {
     },
     'poll-gmail-replies': {
         'task':     'apps.notifications.tasks.poll_gmail_replies',
-        'schedule': crontab(minute='*/30'),  # every 30 minutes
+        'schedule': crontab(minute='*/15'),  # every 15 min — per-org interval enforced in task
     },
 }

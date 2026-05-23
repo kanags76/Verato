@@ -232,10 +232,13 @@ def _generate_digest_intro(org_name, overdue, at_risk, on_track) -> str:
 @shared_task
 def poll_gmail_replies():
     """
-    Every 30 min — check Gmail reply threads for all orgs with Gmail connected.
-    For each reply found: parse with Gemini, auto log-update on the commitment.
+    Every 15 min — check Gmail reply threads for orgs with Gmail polling enabled.
+    Per-org interval (gmail_poll_interval_minutes, default 30) is respected by
+    comparing against the last GmailPollLog entry for that org.
     All runs logged to GmailPollLog.
     """
+    from datetime import timedelta
+    from django.utils import timezone
     from apps.accounts.models import Organisation
     from .gmail import poll_reply_threads, parse_reply_with_gemini
 
@@ -245,6 +248,16 @@ def poll_gmail_replies():
         s = org.settings or {}
         if not s.get('gmail_refresh_token'):
             continue
+        if not s.get('gmail_polling_enabled', False):
+            continue
+
+        # Respect per-org poll interval
+        interval_minutes = int(s.get('gmail_poll_interval_minutes', 30))
+        last_poll = GmailPollLog.objects.filter(organisation=org).order_by('-polled_at').first()
+        if last_poll:
+            next_poll_due = last_poll.polled_at + timedelta(minutes=interval_minutes)
+            if timezone.now() < next_poll_due:
+                continue
 
         poll_log = GmailPollLog(organisation=org)
         try:
