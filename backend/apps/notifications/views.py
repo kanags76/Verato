@@ -47,6 +47,9 @@ def nudge_settings(request):
         data = request.data
         org_settings = org.settings or {}
 
+        if 'nudge_enabled' in data:
+            org_settings['nudge_enabled'] = bool(data['nudge_enabled'])
+
         if 'first_days_before' in data:
             val = int(data['first_days_before'])
             if val not in _VALID_FIRST_DAYS:
@@ -70,6 +73,7 @@ def nudge_settings(request):
 
     org_settings = org.settings or {}
     return Response({
+        'nudge_enabled':       org_settings.get('nudge_enabled', False),
         'first_days_before':   org_settings.get('nudge_first_days_before', 2),
         'second_hours_before': org_settings.get('nudge_second_hours_before', 48),
         'post_due_days':       [1, 2, 3],

@@ -37,6 +37,8 @@ def send_deadline_nudges():
         org_settings = org.settings or {}
         if not org_settings.get('slack_token'):
             continue
+        if not org_settings.get('nudge_enabled', False):
+            continue
 
         first_days   = int(org_settings.get('nudge_first_days_before', 2))
         second_hours = int(org_settings.get('nudge_second_hours_before', 48))

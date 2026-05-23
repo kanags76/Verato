@@ -8,6 +8,11 @@ class OrganisationAdminForm(forms.ModelForm):
     FIRST_DAYS_CHOICES  = [(1, '1 day before'), (2, '2 days before'), (5, '5 days before')]
     SECOND_HOURS_CHOICES = [(24, '24 hours before'), (48, '48 hours before'), (72, '72 hours before')]
 
+    nudge_enabled = forms.BooleanField(
+        required=False,
+        label='Enable automatic nudges',
+        help_text='When checked, Slack nudges will be sent daily at 09:00 UTC.',
+    )
     nudge_first_days_before = forms.ChoiceField(
         choices=FIRST_DAYS_CHOICES, required=False, initial=2,
         label='First reminder',
@@ -27,12 +32,14 @@ class OrganisationAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             s = self.instance.settings or {}
-            self.fields['nudge_first_days_before'].initial  = s.get('nudge_first_days_before', 2)
-            self.fields['nudge_second_hours_before'].initial = s.get('nudge_second_hours_before', 48)
+            self.fields['nudge_enabled'].initial              = s.get('nudge_enabled', False)
+            self.fields['nudge_first_days_before'].initial    = s.get('nudge_first_days_before', 2)
+            self.fields['nudge_second_hours_before'].initial  = s.get('nudge_second_hours_before', 48)
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         s = instance.settings or {}
+        s['nudge_enabled']            = bool(self.cleaned_data.get('nudge_enabled', False))
         s['nudge_first_days_before']  = int(self.cleaned_data['nudge_first_days_before'])
         s['nudge_second_hours_before'] = int(self.cleaned_data['nudge_second_hours_before'])
         instance.settings = s
@@ -44,17 +51,21 @@ class OrganisationAdminForm(forms.ModelForm):
 @admin.register(Organisation)
 class OrganisationAdmin(admin.ModelAdmin):
     form          = OrganisationAdminForm
-    list_display  = ['name', 'slug', 'slack_connected', 'nudge_first_days', 'nudge_second_hours', 'created_at']
+    list_display  = ['name', 'slug', 'slack_connected', 'nudges_enabled', 'nudge_first_days', 'nudge_second_hours', 'created_at']
     search_fields = ['name', 'slug']
     fieldsets = [
         (None,           {'fields': ['name', 'slug']}),
-        ('Nudge Settings', {'fields': ['nudge_first_days_before', 'nudge_second_hours_before'],
+        ('Nudge Settings', {'fields': ['nudge_enabled', 'nudge_first_days_before', 'nudge_second_hours_before'],
                             'description': 'Post-due nudges (day +1, +2, +3) and CoS escalation on day +1 are always active.'}),
     ]
 
     @admin.display(description='Slack', boolean=True)
     def slack_connected(self, obj):
         return bool((obj.settings or {}).get('slack_token'))
+
+    @admin.display(description='Nudges', boolean=True)
+    def nudges_enabled(self, obj):
+        return bool((obj.settings or {}).get('nudge_enabled', False))
 
     @admin.display(description='1st nudge')
     def nudge_first_days(self, obj):
