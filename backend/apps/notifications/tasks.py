@@ -7,7 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
 from apps.commitments.models import Commitment, CommitmentEvent
-from .models import NudgeLog
+from .models import NudgeLog, GmailPollLog
 from .slack import send_nudge_dm, send_cos_overdue_alert
 
 logger = logging.getLogger(__name__)
@@ -227,3 +227,84 @@ def _generate_digest_intro(org_name, overdue, at_risk, on_track) -> str:
             f"Here is your weekly commitment summary for {org_name}. "
             f"{len(overdue)} overdue, {len(at_risk)} at risk, {len(on_track)} on track."
         )
+
+
+@shared_task
+def poll_gmail_replies():
+    """
+    Every 30 min — check Gmail reply threads for all orgs with Gmail connected.
+    For each reply found: parse with Gemini, auto log-update on the commitment.
+    All runs logged to GmailPollLog.
+    """
+    from apps.accounts.models import Organisation
+    from .gmail import poll_reply_threads, parse_reply_with_gemini
+
+    total_updated = 0
+
+    for org in Organisation.objects.all():
+        s = org.settings or {}
+        if not s.get('gmail_refresh_token'):
+            continue
+
+        poll_log = GmailPollLog(organisation=org)
+        try:
+            replies = poll_reply_threads(org)
+            poll_log.threads_checked = len(replies)
+
+            for reply in replies:
+                nl         = reply['nudge_log']
+                commitment = nl.commitment
+                reply_body = reply['reply_body']
+
+                if commitment.status in {Commitment.Status.DELIVERED, Commitment.Status.CANCELLED}:
+                    continue
+
+                deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'none'
+                parsed = parse_reply_with_gemini(commitment.normalised_text, deadline_str, reply_body)
+
+                intent   = parsed.get('intent', 'no_update')
+                note     = parsed.get('note', reply_body[:200])
+                new_date = parsed.get('suggested_deadline')
+
+                status_map = {
+                    'done':     Commitment.Status.DELIVERED,
+                    'deferred': Commitment.Status.DEFERRED,
+                    'blocked':  Commitment.Status.AT_RISK,
+                    'active':   Commitment.Status.ACTIVE,
+                }
+                new_status = status_map.get(intent)
+
+                update_fields = ['updated_at']
+                if new_status and new_status != commitment.status:
+                    commitment.status = new_status
+                    update_fields.append('status')
+                if new_date:
+                    from datetime import date as date_type
+                    import datetime
+                    try:
+                        commitment.deadline = datetime.date.fromisoformat(new_date)
+                        update_fields.append('deadline')
+                    except ValueError:
+                        pass
+                if len(update_fields) > 1:
+                    commitment.save(update_fields=update_fields)
+
+                CommitmentEvent.objects.create(
+                    commitment=commitment,
+                    event_type=CommitmentEvent.EventType.FIELD_EDITED,
+                    note=f'[Gmail reply — auto-parsed] {note}',
+                    new_value={'intent': intent, 'suggested_deadline': new_date},
+                )
+
+                poll_log.replies_found      += 1
+                poll_log.commitments_updated += 1
+                total_updated               += 1
+
+        except Exception as exc:
+            logger.error("poll_gmail_replies failed for org %s: %s", org.slug, exc)
+            poll_log.error = str(exc)
+
+        poll_log.save()
+
+    logger.info("poll_gmail_replies: %d commitments updated across all orgs", total_updated)
+    return {'commitments_updated': total_updated}

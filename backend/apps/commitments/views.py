@@ -284,6 +284,33 @@ class CommitmentViewSet(
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
 
+        elif method == 'email':
+            from apps.notifications.gmail import send_nudge_email
+            from apps.notifications.models import NudgeLog
+            org = commitment.organisation
+            to_email = getattr(owner, 'email', '') or ''
+            if not to_email:
+                return Response(
+                    {'detail': 'Owner has no email address.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            thread_id = send_nudge_email(org, to_email, owner.name, commitment, note=note)
+            if thread_id is None:
+                return Response(
+                    {'detail': 'Gmail is not connected or email could not be sent.'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            # Store thread_id on a NudgeLog so poll_gmail_replies can track the reply.
+            # get_or_create ensures idempotency; update sets the thread_id.
+            nl, _ = NudgeLog.objects.get_or_create(
+                commitment=commitment,
+                nudge_type=NudgeLog.NudgeType.FIRST_REMINDER,
+                defaults={'person': owner, 'channel': ''},
+            )
+            if thread_id:
+                nl.gmail_thread_id = thread_id
+                nl.save(update_fields=['gmail_thread_id'])
+
         method_label = {
             'slack':      'Slack DM',
             'email':      'Email',

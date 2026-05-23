@@ -22,6 +22,122 @@ from apps.commitments.models import Commitment
 logger = logging.getLogger(__name__)
 
 
+# ── Gmail OAuth ───────────────────────────────────────────────────────────────
+
+_GMAIL_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'openid',
+]
+
+
+@extend_schema(tags=['gmail'], summary='Gmail connection status')
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def gmail_status(request):
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'connected': False, 'email': None})
+    s = org.settings or {}
+    return Response({
+        'connected': bool(s.get('gmail_refresh_token')),
+        'email':     s.get('gmail_email'),
+    })
+
+
+def gmail_oauth_start(request):
+    """Redirect browser to Google OAuth consent for Gmail access."""
+    from rest_framework_simplejwt.tokens import AccessToken
+    from rest_framework_simplejwt.exceptions import TokenError
+    from apps.accounts.models import User
+
+    token_str = request.GET.get('auth', '')
+    if token_str:
+        try:
+            token = AccessToken(token_str)
+            user  = User.objects.get(pk=token['user_id'])
+            request.user = user
+        except (TokenError, User.DoesNotExist):
+            return HttpResponse('Invalid or expired token.', status=401)
+    elif not request.user.is_authenticated:
+        return HttpResponse('Unauthorized', status=401)
+
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return HttpResponse('User has no organisation.', status=403)
+
+    from urllib.parse import urlencode
+    state = signing.dumps({'org_id': str(org.id)}, salt='gmail-oauth')
+    params = urlencode({
+        'client_id':     settings.GOOGLE_CLIENT_ID,
+        'redirect_uri':  settings.GOOGLE_GMAIL_REDIRECT_URI,
+        'response_type': 'code',
+        'scope':         ' '.join(_GMAIL_SCOPES),
+        'access_type':   'offline',
+        'prompt':        'consent',
+        'state':         state,
+    })
+    return HttpResponseRedirect(f'https://accounts.google.com/o/oauth2/v2/auth?{params}')
+
+
+@csrf_exempt
+def gmail_oauth_callback(request):
+    """Exchange Google auth code for tokens and store on org."""
+    if request.GET.get('error'):
+        return _close_window_response('Gmail connection cancelled.')
+
+    code  = request.GET.get('code', '')
+    state = request.GET.get('state', '')
+    if not code or not state:
+        return _close_window_response('Missing code or state.', error=True)
+
+    try:
+        data   = signing.loads(state, salt='gmail-oauth', max_age=600)
+        org_id = data['org_id']
+    except signing.BadSignature:
+        return _close_window_response('Invalid state parameter.', error=True)
+
+    try:
+        from apps.accounts.models import Organisation
+        org = Organisation.objects.get(id=org_id)
+    except Organisation.DoesNotExist:
+        return _close_window_response('Organisation not found.', error=True)
+
+    try:
+        import requests as http_requests
+        token_resp = http_requests.post('https://oauth2.googleapis.com/token', data={
+            'code':          code,
+            'client_id':     settings.GOOGLE_CLIENT_ID,
+            'client_secret': settings.GOOGLE_CLIENT_SECRET,
+            'redirect_uri':  settings.GOOGLE_GMAIL_REDIRECT_URI,
+            'grant_type':    'authorization_code',
+        })
+        token_resp.raise_for_status()
+        tokens = token_resp.json()
+
+        # Get the user's email
+        userinfo_resp = http_requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f"Bearer {tokens['access_token']}"},
+        )
+        gmail_email = userinfo_resp.json().get('email', '')
+
+    except Exception as exc:
+        logger.error("Gmail OAuth token exchange failed: %s", exc)
+        return _close_window_response('Gmail connection failed. Please try again.', error=True)
+
+    s = org.settings or {}
+    s['gmail_access_token']  = tokens.get('access_token')
+    s['gmail_refresh_token'] = tokens.get('refresh_token')
+    s['gmail_email']         = gmail_email
+    org.settings = s
+    org.save(update_fields=['settings'])
+
+    logger.info("Gmail connected for org %s (%s)", org.slug, gmail_email)
+    return _close_window_response(f'Gmail connected — {gmail_email} ✓')
+
+
 # ── Nudge settings ────────────────────────────────────────────────────────────
 
 _VALID_FIRST_DAYS   = {1, 2, 5}

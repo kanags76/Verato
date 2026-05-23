@@ -21,4 +21,8 @@ app.conf.beat_schedule = {
         'task':     'apps.notifications.tasks.send_weekly_digest',
         'schedule': crontab(minute=0, hour=7, day_of_week='monday'),
     },
+    'poll-gmail-replies': {
+        'task':     'apps.notifications.tasks.poll_gmail_replies',
+        'schedule': crontab(minute='*/30'),  # every 30 minutes
+    },
 }

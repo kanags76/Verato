@@ -27,10 +27,27 @@ class NudgeLog(models.Model):
     nudged_at  = models.DateTimeField(auto_now_add=True)
     channel    = models.CharField(max_length=64, blank=True)
 
+    gmail_thread_id = models.CharField(max_length=32, blank=True)
+
     class Meta:
         db_table        = 'notifications_nudgelog'
         ordering        = ['-nudged_at']
         unique_together = [['commitment', 'nudge_type']]
+
+
+class GmailPollLog(models.Model):
+    """One row per poll run per org — tracks what was found and what was updated."""
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation        = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='gmail_poll_logs')
+    polled_at           = models.DateTimeField(auto_now_add=True)
+    threads_checked     = models.IntegerField(default=0)
+    replies_found       = models.IntegerField(default=0)
+    commitments_updated = models.IntegerField(default=0)
+    error               = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'notifications_gmailpolllog'
+        ordering = ['-polled_at']
 
 
 class NudgeDashboard(NudgeLog):

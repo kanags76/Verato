@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.utils.html import format_html, mark_safe
 
-from .models import NudgeLog, NudgeDashboard
+from .models import NudgeLog, NudgeDashboard, GmailPollLog
 
 
 # ── NudgeLog ──────────────────────────────────────────────────────────────────
@@ -138,3 +138,30 @@ class NudgeDashboardAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):               return False
     def has_change_permission(self, request, obj=None):  return False
     def has_delete_permission(self, request, obj=None):  return False
+
+
+# ── GmailPollLog ──────────────────────────────────────────────────────────────
+
+@admin.register(GmailPollLog)
+class GmailPollLogAdmin(admin.ModelAdmin):
+    list_display    = ['polled_at_display', 'organisation', 'threads_checked',
+                       'replies_found', 'commitments_updated', 'status_badge']
+    list_filter     = ['organisation', 'polled_at']
+    readonly_fields = ['organisation', 'polled_at', 'threads_checked',
+                       'replies_found', 'commitments_updated', 'error']
+    ordering        = ['-polled_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Polled at', ordering='polled_at')
+    def polled_at_display(self, obj):
+        return obj.polled_at.strftime('%-d %b %Y %H:%M')
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        if obj.error:
+            return format_html(
+                '<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Error</span>',
+            )
+        return mark_safe('<span style="background:#22c55e;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">OK</span>')
