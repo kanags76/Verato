@@ -313,6 +313,20 @@ def poll_gmail_replies():
                     new_value={'intent': intent, 'suggested_deadline': new_date},
                 )
 
+                owner      = commitment.owner
+                owner_name = owner.name if owner else 'Owner'
+                intent_label = {
+                    'done':     'marked it Done',
+                    'deferred': 'requested a deadline extension',
+                    'blocked':  'reported a blocker',
+                }.get(intent, f'replied ({intent})')
+                from apps.notifications.views import create_cos_notification
+                create_cos_notification(
+                    org, commitment,
+                    f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via email.',
+                    'gmail_reply',
+                )
+
                 poll_log.replies_found      += 1
                 poll_log.commitments_updated += 1
                 total_updated               += 1

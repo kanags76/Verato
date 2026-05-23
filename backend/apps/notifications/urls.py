@@ -14,6 +14,10 @@ from .views import (
     slack_users_search,
     slack_users_import,
     slack_users_sync,
+    notification_list,
+    notification_unread_count,
+    notification_mark_read,
+    notification_mark_all_read,
 )
 
 urlpatterns = [
@@ -31,4 +35,8 @@ urlpatterns = [
     path('slack/users/',           slack_users_search,    name='slack-users-search'),
     path('slack/users/import/',    slack_users_import,    name='slack-users-import'),
     path('slack/users/sync/',      slack_users_sync,      name='slack-users-sync'),
+    path('notifications/',                    notification_list,          name='notification-list'),
+    path('notifications/unread-count/',       notification_unread_count,  name='notification-unread-count'),
+    path('notifications/mark-all-read/',      notification_mark_all_read, name='notification-mark-all-read'),
+    path('notifications/<uuid:pk>/read/',     notification_mark_read,     name='notification-mark-read'),
 ]

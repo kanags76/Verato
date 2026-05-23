@@ -367,6 +367,13 @@ def _handle_done(commitment):
         commitment.resolved_at = timezone.now()
         commitment.save(update_fields=['status', 'resolved_at', 'updated_at'])
         logger.info("Slack nudge: commitment %s marked DELIVERED", commitment.id)
+        owner = getattr(commitment, 'owner', None)
+        name  = owner.name if owner else 'Owner'
+        create_cos_notification(
+            commitment.organisation, commitment,
+            f'{name} marked "{commitment.normalised_text[:80]}" as Done via Slack.',
+            'slack_reply',
+        )
 
 
 def _handle_delayed(commitment):
@@ -374,6 +381,13 @@ def _handle_delayed(commitment):
         commitment.status = Commitment.Status.DEFERRED
         commitment.save(update_fields=['status', 'updated_at'])
         logger.info("Slack nudge: commitment %s marked DEFERRED", commitment.id)
+        owner = getattr(commitment, 'owner', None)
+        name  = owner.name if owner else 'Owner'
+        create_cos_notification(
+            commitment.organisation, commitment,
+            f'{name} needs more time on "{commitment.normalised_text[:80]}" (Slack).',
+            'slack_reply',
+        )
 
 
 def _handle_blocked(commitment):
@@ -381,6 +395,13 @@ def _handle_blocked(commitment):
         commitment.status = Commitment.Status.AT_RISK
         commitment.save(update_fields=['status', 'updated_at'])
         logger.info("Slack nudge: commitment %s marked AT_RISK (blocked)", commitment.id)
+        owner = getattr(commitment, 'owner', None)
+        name  = owner.name if owner else 'Owner'
+        create_cos_notification(
+            commitment.organisation, commitment,
+            f'{name} is blocked on "{commitment.normalised_text[:80]}" (Slack).',
+            'slack_reply',
+        )
 
 
 # ── Slack user management ─────────────────────────────────────────────────────
@@ -771,3 +792,81 @@ def slack_oauth_callback(request):
 
     logger.info("Slack workspace %s connected to org %s", workspace_id, org.slug)
     return _close_window_response('Slack connected successfully! ✓')
+
+
+# ── In-app notifications ──────────────────────────────────────────────────────
+
+def create_cos_notification(org, commitment, message, notification_type):
+    """
+    Create an InAppNotification for all org admin users.
+    Called from Slack action handlers and Gmail poll task.
+    """
+    from .models import InAppNotification
+    InAppNotification.objects.create(
+        organisation=org,
+        commitment=commitment,
+        message=message,
+        notification_type=notification_type,
+    )
+
+
+@extend_schema(tags=['notifications'], summary='List in-app notifications for current user')
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def notification_list(request):
+    from .models import InAppNotification
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response([])
+    qs = InAppNotification.objects.filter(organisation=org).order_by('-created_at')[:50]
+    data = [
+        {
+            'id':                str(n.id),
+            'message':           n.message,
+            'notification_type': n.notification_type,
+            'is_read':           n.is_read,
+            'created_at':        n.created_at.isoformat(),
+            'commitment_id':     str(n.commitment_id) if n.commitment_id else None,
+        }
+        for n in qs
+    ]
+    return Response(data)
+
+
+@extend_schema(tags=['notifications'], summary='Unread notification count')
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def notification_unread_count(request):
+    from .models import InAppNotification
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'unread': 0})
+    count = InAppNotification.objects.filter(organisation=org, is_read=False).count()
+    return Response({'unread': count})
+
+
+@extend_schema(tags=['notifications'], summary='Mark a notification as read')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def notification_mark_read(request, pk):
+    from .models import InAppNotification
+    org = getattr(request.user, 'organisation', None)
+    try:
+        n = InAppNotification.objects.get(pk=pk, organisation=org)
+    except InAppNotification.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+    n.is_read = True
+    n.save(update_fields=['is_read'])
+    return Response({'detail': 'Marked as read.'})
+
+
+@extend_schema(tags=['notifications'], summary='Mark all notifications as read')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def notification_mark_all_read(request):
+    from .models import InAppNotification
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'detail': 'No organisation.'}, status=400)
+    InAppNotification.objects.filter(organisation=org, is_read=False).update(is_read=True)
+    return Response({'detail': 'All marked as read.'})

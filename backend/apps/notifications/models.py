@@ -56,3 +56,25 @@ class NudgeDashboard(NudgeLog):
         proxy        = True
         app_label    = 'notifications'
         verbose_name = verbose_name_plural = 'Nudge Dashboard'
+
+
+class InAppNotification(models.Model):
+    """
+    Per-user in-app alert. Created when a commitment is updated via Slack button
+    click or Gmail reply parse. Frontend polls /api/v1/notifications/ for these.
+    """
+    class Type(models.TextChoices):
+        SLACK_REPLY  = 'slack_reply',  'Slack Reply'
+        GMAIL_REPLY  = 'gmail_reply',  'Gmail Reply'
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')
+    commitment   = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
+    message      = models.TextField()
+    notification_type = models.CharField(max_length=20, choices=Type.choices)
+    is_read      = models.BooleanField(default=False)
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'notifications_inappnotification'
+        ordering = ['-created_at']
