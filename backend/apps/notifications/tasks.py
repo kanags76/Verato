@@ -256,7 +256,7 @@ def poll_gmail_replies():
         last_poll = GmailPollLog.objects.filter(organisation=org).order_by('-polled_at').first()
         if last_poll:
             next_poll_due = last_poll.polled_at + timedelta(minutes=interval_minutes)
-            if timezone.now() < next_poll_due:
+            if timezone.now() < next_poll_due - timedelta(seconds=60):
                 continue
 
         poll_log = GmailPollLog(organisation=org)
