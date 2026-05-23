@@ -162,7 +162,7 @@ class MeetingAdmin(DataAccessMixin, admin.ModelAdmin):
 
         # Recent meetings by status
         statuses = {}
-        for s in ['pending', 'processing', 'complete', 'failed']:
+        for s in ['pending', 'processing', 'pending_clarification', 'complete', 'failed']:
             statuses[s] = Meeting.objects.filter(processing_status=s).count()
 
         # Stuck processing (>10 min in processing state)

@@ -264,10 +264,13 @@ def slack_users_search(request):
 
 @extend_schema(
     tags=['slack'],
-    summary='Import Slack users as Persons',
+    summary='Import selected Slack users as Persons',
     description=(
-        'For each selected Slack user: if person_id is provided, links slack_user_id to that Person. '
-        'If no person_id, creates a new Person from the Slack profile.'
+        'Send a list of slack_user_ids. For each: fetches their Slack profile, '
+        'then checks if a Person with that email already exists in the org — '
+        'if yes, links the slack_user_id to that Person; '
+        'if no, creates a new Person from their Slack profile. '
+        'Returns each person with an "action" field: "linked" or "created".'
     ),
 )
 @api_view(['POST'])
@@ -284,45 +287,48 @@ def slack_users_import(request):
     if err:
         return err
 
-    users = request.data.get('users', [])
-    if not users:
-        return Response({'detail': 'Provide a non-empty users list.'}, status=400)
+    slack_ids = request.data.get('slack_user_ids', [])
+    if not slack_ids:
+        return Response({'detail': 'Provide a non-empty slack_user_ids list.'}, status=400)
 
     results = []
-    for entry in users:
-        slack_id  = entry.get('slack_user_id', '').strip()
-        person_id = entry.get('person_id')
+    for slack_id in slack_ids:
+        slack_id = slack_id.strip()
         if not slack_id:
             continue
 
-        if person_id:
-            try:
-                person = Person.objects.get(id=person_id, organisation=org)
-            except Person.DoesNotExist:
-                return Response({'detail': f'Person {person_id} not found.'}, status=404)
+        # Fetch Slack profile
+        try:
+            resp    = client.users_info(user=slack_id)
+            member  = resp['user']
+            profile = member.get('profile', {})
+            name    = profile.get('real_name') or profile.get('display_name') or slack_id
+            email   = (profile.get('email') or '').strip().lower() or None
+        except Exception as exc:
+            logger.error("slack_users_import: users_info failed for %s: %s", slack_id, exc)
+            return Response({'detail': f'Slack API error fetching {slack_id}: {exc}'}, status=502)
+
+        # Email match → link; no match → create
+        person = Person.objects.filter(organisation=org, email__iexact=email).first() if email else None
+
+        if person:
             person.slack_user_id = slack_id
             person.save(update_fields=['slack_user_id'])
+            action = 'linked'
         else:
-            try:
-                resp    = client.users_info(user=slack_id)
-                member  = resp['user']
-                profile = member.get('profile', {})
-                name    = profile.get('real_name') or profile.get('display_name') or slack_id
-                email   = profile.get('email') or None
-            except Exception as exc:
-                logger.error("slack_users_import: users_info failed for %s: %s", slack_id, exc)
-                return Response({'detail': f'Slack API error fetching {slack_id}: {exc}'}, status=502)
-
-            person, _ = Person.objects.get_or_create(
+            person, created = Person.objects.get_or_create(
                 organisation=org,
                 slack_user_id=slack_id,
                 defaults={'name': name, 'email': email},
             )
-            if not person.email and email:
+            if not created and not person.email and email:
                 person.email = email
                 person.save(update_fields=['email'])
+            action = 'created'
 
-        results.append(PersonSerializer(person, context={'request': request}).data)
+        data = PersonSerializer(person, context={'request': request}).data
+        data['action'] = action
+        results.append(data)
 
     return Response(results, status=201)
 
