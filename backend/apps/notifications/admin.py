@@ -161,7 +161,5 @@ class GmailPollLogAdmin(admin.ModelAdmin):
     @admin.display(description='Status')
     def status_badge(self, obj):
         if obj.error:
-            return format_html(
-                '<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Error</span>',
-            )
+            return mark_safe('<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Error</span>')
         return mark_safe('<span style="background:#22c55e;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">OK</span>')
