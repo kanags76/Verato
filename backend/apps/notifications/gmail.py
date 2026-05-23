@@ -179,28 +179,38 @@ def _extract_body(message: dict) -> str:
     return ''
 
 
+def _load_prompt(name: str, fallback: str) -> str:
+    try:
+        from apps.prompts.models import Prompt
+        return Prompt.objects.get(name=name).content
+    except Exception:
+        return fallback
+
+
+_GMAIL_REPLY_PARSE_FALLBACK = (
+    'An owner replied to a commitment reminder email. Extract a structured update.\n\n'
+    'COMMITMENT: {commitment_text}\nDEADLINE: {deadline_str}\n\nREPLY EMAIL:\n{reply_body}\n\n'
+    'Return JSON only (no markdown):\n'
+    '{{"intent": "done"|"active"|"deferred"|"blocked"|"no_update", '
+    '"note": "1-2 sentence summary", "suggested_deadline": "YYYY-MM-DD or null"}}'
+)
+
+
 def parse_reply_with_gemini(commitment_text: str, deadline_str: str, reply_body: str) -> dict:
     """
     Use Gemini to extract intent + summary from an email reply.
     Returns: { intent, note, suggested_deadline }
+    Prompt is loaded from the DB (prompts.gmail_reply_parse) so it can be edited in admin.
     """
     try:
         import google.generativeai as genai
         model = genai.GenerativeModel(settings.GEMINI_EXTRACTION_MODEL)
-        prompt = f"""An owner replied to a commitment reminder email. Extract a structured update.
-
-COMMITMENT: {commitment_text}
-DEADLINE: {deadline_str}
-
-REPLY EMAIL:
-{reply_body[:2000]}
-
-Return JSON only (no markdown):
-{{
-  "intent": "done" | "active" | "deferred" | "blocked" | "no_update",
-  "note": "1-2 sentence summary of what the owner said",
-  "suggested_deadline": "YYYY-MM-DD if they mentioned a new date, else null"
-}}"""
+        template = _load_prompt('gmail_reply_parse', _GMAIL_REPLY_PARSE_FALLBACK)
+        prompt = template.format(
+            commitment_text=commitment_text,
+            deadline_str=deadline_str,
+            reply_body=reply_body[:2000],
+        )
         response = model.generate_content(prompt)
         text = response.text.strip()
         if text.startswith('```'):
