@@ -229,6 +229,38 @@ def slack_status(request):
     })
 
 
+@extend_schema(tags=['slack'], summary='Disconnect Slack — removes org bot token')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def slack_disconnect(request):
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'detail': 'User has no organisation.'}, status=403)
+    s = org.settings or {}
+    s.pop('slack_token', None)
+    s.pop('slack_workspace_id', None)
+    s.pop('slack_workspace_name', None)
+    org.settings = s
+    org.save(update_fields=['settings'])
+    return Response({'detail': 'Slack disconnected.'})
+
+
+@extend_schema(tags=['gmail'], summary='Disconnect Gmail — removes org OAuth tokens')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def gmail_disconnect(request):
+    org = getattr(request.user, 'organisation', None)
+    if org is None:
+        return Response({'detail': 'User has no organisation.'}, status=403)
+    s = org.settings or {}
+    s.pop('gmail_access_token', None)
+    s.pop('gmail_refresh_token', None)
+    s.pop('gmail_email', None)
+    org.settings = s
+    org.save(update_fields=['settings'])
+    return Response({'detail': 'Gmail disconnected.'})
+
+
 @extend_schema(
     tags=['slack'],
     summary='Send test Slack DM',
