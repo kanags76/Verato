@@ -1,3 +1,4 @@
+from django.db import models
 from django.db.models import Count
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -66,7 +67,34 @@ def _log(commitment, event_type, actor, old_value=None, new_value=None, note='')
         tags=['commitments'],
         summary='Bulk confirm all pending commitments (optionally filter by min_confidence)',
     ),
-    nudge=extend_schema(tags=['commitments'], summary='Send a Slack deadline nudge to the commitment owner'),
+    nudge=extend_schema(
+        tags=['commitments'],
+        summary='Send or log a nudge to the commitment owner',
+        description=(
+            'method: slack (default) | email | phone | in_person | other. '
+            'For slack, sends a DM if owner has slack_user_id. '
+            'All methods log a NUDGED event in history.'
+        ),
+    ),
+    manual_nudge_queue=extend_schema(
+        tags=['commitments'],
+        summary='Manual nudge queue',
+        description=(
+            'Active/at-risk/overdue commitments whose owner cannot be auto-nudged '
+            '(no Slack user ID, or no owner). Ordered by deadline then risk score. '
+            'Use POST /commitments/{id}/nudge/ to log a manual nudge, '
+            'POST /commitments/{id}/log-update/ to record the owner\'s response.'
+        ),
+    ),
+    log_update=extend_schema(
+        tags=['commitments'],
+        summary='Log owner response after a manual nudge',
+        description=(
+            'Record what the owner said after the CoS followed up. '
+            'Body: { "response": "...", "new_status": "active|deferred|done|cancelled" (optional) }. '
+            'Creates a FIELD_EDITED event in history.'
+        ),
+    ),
     reopen=extend_schema(tags=['commitments'], summary='Reopen a closed commitment → ACTIVE'),
     history=extend_schema(tags=['commitments'], summary='Unified audit timeline: escalations + feedback events, newest first'),
 )
@@ -244,29 +272,135 @@ class CommitmentViewSet(
 
     @action(detail=True, methods=['post'])
     def nudge(self, request, pk=None):
-        """Manually send a Slack deadline nudge DM to the commitment owner."""
         commitment = self.get_object()
-
         if not commitment.owner:
             return Response({'detail': 'Commitment has no owner.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not commitment.owner.slack_user_id:
-            return Response(
-                {'detail': 'Owner has no Slack user ID linked.'},
-                status=status.HTTP_400_BAD_REQUEST,
+
+        method = request.data.get('method', 'slack')
+        note   = request.data.get('note', '').strip()
+        owner  = commitment.owner
+        channel = None
+
+        if method == 'slack':
+            if not owner.slack_user_id:
+                return Response(
+                    {'detail': 'Owner has no Slack user ID. Use method: email | phone | in_person | other.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            from apps.notifications.slack import send_nudge_dm
+            channel = send_nudge_dm(owner.slack_user_id, commitment)
+            if channel is None:
+                return Response(
+                    {'detail': 'Slack is not configured or message could not be sent.'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+        method_label = {
+            'slack':      'Slack DM',
+            'email':      'Email',
+            'phone':      'Phone call',
+            'in_person':  'In person',
+            'other':      'Other',
+        }.get(method, method)
+
+        log_note = f'Nudge via {method_label} to {owner.name}'
+        if note:
+            log_note += f' — {note}'
+
+        _log(commitment, CommitmentEvent.EventType.NUDGED, _get_actor(request), note=log_note)
+        return Response({'detail': 'Nudge logged.', 'method': method, 'channel': channel})
+
+    @action(detail=False, methods=['get'], url_path='manual-nudge-queue')
+    def manual_nudge_queue(self, request):
+        from django.utils import timezone as tz
+        org = get_user_org(request)
+        if org is None:
+            return Response([])
+
+        active_statuses = [
+            Commitment.Status.ACTIVE,
+            Commitment.Status.AT_RISK,
+            Commitment.Status.ESCALATED,
+            Commitment.Status.DEFERRED,
+        ]
+        today = tz.now().date()
+
+        qs = (
+            Commitment.objects
+            .filter(organisation=org, status__in=active_statuses, deadline__isnull=False)
+            .select_related('owner', 'meeting')
+            .prefetch_related('tags')
+            .filter(
+                models.Q(owner__isnull=True) |
+                models.Q(owner__slack_user_id='')
             )
+            .order_by('deadline', '-risk_score')
+        )
 
-        from apps.notifications.slack import send_nudge_dm
-        channel = send_nudge_dm(commitment.owner.slack_user_id, commitment)
+        results = []
+        for c in qs:
+            days = (c.deadline - today).days
+            if days < 0:
+                urgency = 'overdue'
+            elif days == 0:
+                urgency = 'due_today'
+            elif days <= 3:
+                urgency = 'due_soon'
+            else:
+                urgency = 'upcoming'
 
-        if channel is None:
-            return Response(
-                {'detail': 'Slack is not configured or the message could not be sent.'},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+            results.append({
+                **CommitmentSerializer(c, context={'request': request}).data,
+                'days_until_due': days,
+                'urgency':        urgency,
+            })
 
-        _log(commitment, CommitmentEvent.EventType.NUDGED, _get_actor(request),
-             note=f'Slack nudge sent to {commitment.owner.name}')
-        return Response({'detail': 'Nudge sent.', 'channel': channel})
+        return Response(results)
+
+    @action(detail=True, methods=['post'], url_path='log-update')
+    def log_update(self, request, pk=None):
+        commitment = self.get_object()
+        response_text = request.data.get('response', '').strip()
+        new_status    = request.data.get('new_status', '').strip()
+
+        if not response_text:
+            return Response({'detail': 'response is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_statuses = {
+            'active':    Commitment.Status.ACTIVE,
+            'deferred':  Commitment.Status.DEFERRED,
+            'done':      Commitment.Status.DELIVERED,
+            'cancelled': Commitment.Status.CANCELLED,
+        }
+
+        old_status = commitment.status
+        if new_status:
+            if new_status not in valid_statuses:
+                return Response(
+                    {'detail': f'new_status must be one of: {", ".join(valid_statuses)}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            commitment.status = valid_statuses[new_status]
+            if commitment.status in {Commitment.Status.DELIVERED, Commitment.Status.CANCELLED}:
+                commitment.resolved_at     = timezone.now()
+                commitment.resolution_note = response_text
+                commitment.save(update_fields=['status', 'resolved_at', 'resolution_note', 'updated_at'])
+            else:
+                commitment.save(update_fields=['status', 'updated_at'])
+
+        _log(
+            commitment,
+            CommitmentEvent.EventType.FIELD_EDITED,
+            _get_actor(request),
+            old_value={'status': old_status} if new_status else None,
+            new_value={'status': commitment.status} if new_status else None,
+            note=f'Owner update: {response_text}',
+        )
+        return Response({
+            'detail':     'Update logged.',
+            'status':     commitment.status,
+            'response':   response_text,
+        })
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
