@@ -280,3 +280,142 @@ Auth: `GEMINI_API_KEY` env var (Google AI Studio API key).
 Falls back to Vertex AI ADC for local development.
 
 **Rotate the API key** at [aistudio.google.com](https://aistudio.google.com) if it is ever exposed.
+
+---
+
+## Current Production State (as of May 2026)
+
+### Access
+
+| Item | Value |
+|------|-------|
+| EC2 IP | `98.87.229.254` |
+| SSH user | `ubuntu` |
+| SSH key | `~/.ssh/verato-ec2.pem` |
+| App path | `/opt/verato` |
+| API | `https://api.verato.twocents.ai` |
+| Frontend | `https://ais-dev-ecrwhyp7mx4gyc7gxgjoek-18239168023.asia-east1.run.app` |
+
+```bash
+ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254
+```
+
+---
+
+### Docker Services
+
+| Service name | Role |
+|-------------|------|
+| `web` | Django / Gunicorn |
+| `celery` | Async worker (queues: default, extractions, notifications) |
+| `celery-beat` | Scheduled task runner |
+| `db` | PostgreSQL 16 |
+| `redis` | Redis 7 |
+| `nginx` | Reverse proxy + SSL |
+
+```bash
+# Check status
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+
+# View logs
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f web
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f celery
+```
+
+---
+
+### Correct Deploy Process
+
+Code is **baked into the Docker image** — not volume-mounted. Always rebuild after any code change:
+
+```bash
+# From local — push code
+git push origin main
+
+# On EC2
+ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254
+cd /opt/verato
+git pull origin main
+docker compose --env-file .env.production -f docker-compose.prod.yml build web celery celery-beat
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --no-deps web celery celery-beat
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py migrate
+```
+
+Or from local in one command (after pushing):
+```bash
+ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && bash scripts/deploy.sh"
+```
+
+**Env-only changes** (no code change) — no rebuild needed, just scp + restart:
+```bash
+scp -i ~/.ssh/verato-ec2.pem .env.production ubuntu@98.87.229.254:/opt/verato/.env.production
+ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker compose --env-file .env.production -f docker-compose.prod.yml restart web celery celery-beat"
+```
+
+---
+
+### Celery Beat Schedule
+
+| Task | Schedule |
+|------|----------|
+| `recompute_risk_scores` | Every 24 hours |
+| `send_deadline_nudges` | Daily 09:00 UTC |
+| `send_weekly_digest` | Monday 07:00 UTC |
+| `poll_gmail_replies` | Every 30 minutes |
+
+---
+
+### Environment Variables
+
+#### Slack
+| Variable | Notes |
+|----------|-------|
+| `SLACK_BOT_TOKEN` | `xoxb-...` — get from Slack app → OAuth & Permissions. **Currently blank — DMs won't fire without this.** |
+| `SLACK_SIGNING_SECRET` | Slack app → Basic Information |
+| `SLACK_CLIENT_ID` | `8245684161444.11177749142678` |
+| `SLACK_CLIENT_SECRET` | Slack app → Basic Information |
+| `SLACK_OAUTH_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/slack/oauth/callback/` |
+
+#### Gmail OAuth (per-org email sending + reply polling)
+| Variable | Notes |
+|----------|-------|
+| `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials |
+| `GOOGLE_CLIENT_SECRET` | Same as above |
+| `GOOGLE_GMAIL_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/gmail/oauth/callback/` |
+
+Gmail API must be enabled in Google Cloud Console. Each org connects via the OAuth flow — tokens stored in `org.settings` (not env vars).
+
+---
+
+### Key Admin / API URLs
+
+| URL | Purpose |
+|-----|---------|
+| `/admin/` | Django admin |
+| `/api/v1/schema/swagger-ui/` | Swagger docs |
+| `/api/v1/gmail/status/` | Gmail connection status (per org) |
+| `/api/v1/gmail/oauth/start/?auth=<jwt>` | Start Gmail OAuth flow |
+| `/api/v1/slack/status/` | Slack connection status |
+| `/api/v1/slack/oauth/start/?auth=<jwt>` | Start Slack OAuth flow |
+
+---
+
+### Useful One-liners
+
+```bash
+# Django shell
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py shell
+
+# Run a task immediately
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py shell -c \
+  "from apps.notifications.tasks import send_deadline_nudges; send_deadline_nudges.delay()"
+
+# Check all migrations applied
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py showmigrations
+
+# Collect static files
+docker compose --env-file .env.production -f docker-compose.prod.yml exec web python manage.py collectstatic --noinput
+
+# Renew SSL cert
+certbot renew && docker compose --env-file .env.production -f docker-compose.prod.yml restart nginx
+```

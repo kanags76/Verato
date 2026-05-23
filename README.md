@@ -2,7 +2,7 @@
 
 Accountability layer for organisations. Extracts every commitment made in meetings, assigns it an owner, scores risk, and nudges before it slips.
 
-**Stack:** Django REST API · Next.js 16 · PostgreSQL 18 · Redis · Celery · Gemini AI
+**Stack:** Django REST API · Next.js · PostgreSQL · Redis · Celery · Gemini AI · Slack · Gmail OAuth
 **Repo:** https://github.com/kanags76/Verato (private)
 
 ---
@@ -13,10 +13,11 @@ Accountability layer for organisations. Extracts every commitment made in meetin
 Verato/
 ├── backend/                   Django project
 │   ├── apps/
-│   │   ├── accounts/          Organisation (plan), User (is_org_admin), Person, Invitation
+│   │   ├── accounts/          Organisation, User (is_org_admin), Person, Invitation
 │   │   ├── meetings/          Meeting (meeting_type, summary), MeetingParticipant, MeetingTopic
 │   │   ├── commitments/       Commitment, CommitmentTag (M2M, org-scoped), EscalationEvent, risk.py
-│   │   ├── notifications/     Slack nudges, weekly email digest, NudgeLog, Slack OAuth
+│   │   ├── notifications/     Slack nudges, Gmail OAuth, NudgeLog, GmailPollLog, weekly digest
+│   │   ├── prompts/           Editable Gemini prompts stored in DB (transcript, import, gmail_reply_parse)
 │   │   └── analytics/         Dashboard summary (overdue / at-risk / on-track counts)
 │   ├── extraction/            AI extraction engine (pure Python, no Django dependency)
 │   │   ├── extractor.py       extract_commitments() — transcript → {commitments, topics, meeting_type, summary}
@@ -208,7 +209,8 @@ brew services stop redis
 | `/api/v1/commitments/{id}/escalate/` | POST | → ESCALATED + EscalationEvent; accepts `{message}` |
 | `/api/v1/commitments/{id}/resolve/` | POST | `{outcome: done\|deferred\|cancelled, note?, new_deadline?}` |
 | `/api/v1/commitments/{id}/reopen/` | POST | Reopen a closed (done/deferred/cancelled) commitment → ACTIVE |
-| `/api/v1/commitments/{id}/nudge/` | POST | Send Slack deadline nudge to the commitment owner right now |
+| `/api/v1/commitments/{id}/nudge/` | POST | Send nudge to owner — `{method: slack\|email\|phone\|in_person\|other, note?}` — email sends from org's Gmail |
+| `/api/v1/commitments/{id}/log-update/` | POST | Log owner response after manual follow-up — `{response, new_status?}` |
 | `/api/v1/commitments/{id}/history/` | GET | Unified audit log: status changes, field edits, nudges, escalations — newest first |
 | **Tags** | | |
 | `/api/v1/tags/` | GET | Tag autocomplete ranked by usage; `?q=` for prefix filter |
@@ -227,6 +229,17 @@ brew services stop redis
 | `/api/v1/slack/actions/` | POST | Slack interactive button handler (Done/Delayed/Blocked) |
 | `/api/v1/slack/oauth/start/` | GET | Redirect to Slack OAuth consent — accepts `?auth=<JWT>` for browser-redirect flows |
 | `/api/v1/slack/oauth/callback/` | GET | Slack OAuth callback — stores per-org bot token |
+| `/api/v1/slack/users/` | GET | Search Slack workspace users by email or name — `?q=` |
+| `/api/v1/slack/users/import/` | POST | Import selected Slack users as Persons (link or create) |
+| `/api/v1/slack/users/sync/` | GET | Full workspace sync — matched/unmatched Persons vs Slack members |
+| `/api/v1/slack/users/sync/` | POST | Confirm sync matches — `{confirmations: [{person_id, slack_user_id}]}` |
+| **Nudge Settings** | | |
+| `/api/v1/nudge-settings/` | GET | Get org nudge schedule: `{nudge_enabled, first_days_before, second_hours_before}` |
+| `/api/v1/nudge-settings/` | PATCH | Update nudge schedule — `first_days_before` (1/2/5), `second_hours_before` (24/48/72), `nudge_enabled` |
+| **Gmail** | | |
+| `/api/v1/gmail/status/` | GET | Is org's Gmail connected? Returns `{connected, email}` |
+| `/api/v1/gmail/oauth/start/` | GET | Redirect to Google OAuth consent — accepts `?auth=<JWT>` for browser-redirect flows |
+| `/api/v1/gmail/oauth/callback/` | GET | Gmail OAuth callback — stores per-org access + refresh tokens |
 
 ---
 
@@ -325,15 +338,18 @@ lsof -i :3000      # check if dev server is running
 | F6 | Meetings list, People list, Settings (Org / Slack / Team) | ✓ Done |
 | W8 | API hardening — audit log, person CRUD/merge, meeting PATCH, participant mgmt, reopen, logout | ✓ Done |
 | W9 | Production fixes — Slack OAuth JWT flow, `GET /auth/me/`, Gemini API key, upload file merge, Django admin pipeline dashboard | ✓ Done |
-| F7 | Mobile polish, E2E tests, Vercel deploy | Next |
-| — | AWS deployment (Phase 3) | After deploy |
+| W10 | Nudge engine — configurable Slack nudge schedule, NudgeLog, CoS escalation, per-org enable/disable | ✓ Done |
+| W11 | Slack user management — workspace search, import, full sync; manual nudge queue flags on CommitmentSerializer | ✓ Done |
+| W12 | Gmail OAuth — send nudge emails from org's Gmail, poll reply threads, Gemini intent parsing, GmailPollLog | ✓ Done |
+| W12.5 | Admin configurability — per-org Gmail polling enable/disable + frequency (15/30/60/120 min); prompts stored in DB | ✓ Done |
+| — | Frontend Gmail/nudge settings UI | Next |
 
 ```
-PHASE 1 — Local backend (Weeks 1–7)           ← COMPLETE (326 tests passing)
-PHASE 2 — Frontend (Next.js, Weeks F1–F6)     ← COMPLETE (running on localhost:3000)
-PHASE 2.5 — Production hardening (W9)         ← COMPLETE (live at api.verato.twocents.ai)
-           Week F7 — polish + deploy           ← Next  →  see 06_phase2_frontend_build_plan.md
-PHASE 3 — Deploy to AWS ECS                   (after frontend deploy)
+PHASE 1 — Local backend (Weeks 1–7)           ← COMPLETE
+PHASE 2 — Frontend (Next.js, Weeks F1–F6)     ← COMPLETE (running on Cloud Run)
+PHASE 2.5 — Production hardening              ← COMPLETE (live at api.verato.twocents.ai)
+PHASE 2.6 — Nudge engine + Gmail OAuth        ← COMPLETE
+PHASE 3 — Frontend nudge/Gmail settings UI    ← Next
 ```
 
 ---
@@ -357,10 +373,11 @@ PHASE 3 — Deploy to AWS ECS                   (after frontend deploy)
 | `SLACK_CLIENT_ID` | Week 6.5+ | Slack OAuth app credentials |
 | `SLACK_CLIENT_SECRET` | Week 6.5+ | Slack OAuth app credentials |
 | `SLACK_OAUTH_REDIRECT_URI` | Week 6.5+ | Default: `http://localhost:8000/api/v1/slack/oauth/callback/` |
-| `SENDGRID_API_KEY` | Week 6+ | Weekly digest email |
+| `SENDGRID_API_KEY` | Week 6+ | Weekly digest email (Gmail OAuth used for nudge emails) |
 | `DEFAULT_FROM_EMAIL` | Week 6+ | Set — `noreply@verato.app` |
-| `ZOOM_*` | Stretch | Placeholder |
-| AWS credentials | Phase 3 | Placeholder |
+| `GOOGLE_CLIENT_ID` | W12+ | Google Cloud Console OAuth 2.0 client — for Gmail OAuth |
+| `GOOGLE_CLIENT_SECRET` | W12+ | Google Cloud Console OAuth 2.0 client secret |
+| `GOOGLE_GMAIL_REDIRECT_URI` | W12+ | Default: `http://localhost:8000/api/v1/gmail/oauth/callback/` |
 
 **`GEMINI_API_KEY`** — required for production. Get it from [aistudio.google.com](https://aistudio.google.com). Local dev falls back to Vertex AI ADC if the key is absent.
 

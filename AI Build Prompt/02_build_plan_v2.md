@@ -260,6 +260,10 @@ app.conf.beat_schedule = {
         'task':     'apps.notifications.tasks.send_weekly_digest',
         'schedule': crontab(minute=0, hour=7, day_of_week='monday'),
     },
+    'poll-gmail-replies': {
+        'task':     'apps.notifications.tasks.poll_gmail_replies',
+        'schedule': crontab(minute='*/15'),  # every 15 min — per-org interval enforced in task
+    },
 }
 ```
 
@@ -602,7 +606,8 @@ COMMITMENTS
   POST   /commitments/{id}/resolve/    {outcome: done|deferred|cancelled, note?, new_deadline?}
                                        logs CommitmentEvent(resolved)
   POST   /commitments/{id}/reopen/     Reopen done/deferred/cancelled → active; logs CommitmentEvent(reopened)
-  POST   /commitments/{id}/nudge/      Send Slack deadline DM to owner now; logs CommitmentEvent(nudged)
+  POST   /commitments/{id}/nudge/      Send nudge {method: slack|email|phone|in_person|other, note?}; logs CommitmentEvent(nudged)
+  POST   /commitments/{id}/log-update/ Log owner response {response, new_status?}; logs CommitmentEvent(field_edited)
   GET    /commitments/{id}/history/    Unified audit log — CommitmentEvent + EscalationEvent, newest first
 
 TAGS
@@ -625,6 +630,19 @@ SLACK
   POST   /slack/actions/            Slack interactive button handler
   GET    /slack/oauth/start/        Redirect to Slack OAuth — accepts ?auth=<JWT> for browser-redirect flows
   GET    /slack/oauth/callback/     OAuth callback — save per-org token
+  GET    /slack/users/              Search Slack workspace by email or name (?q=)
+  POST   /slack/users/import/       Import selected Slack users as Persons (link or create)
+  GET    /slack/users/sync/         Full workspace sync — matched/unmatched Persons vs Slack members
+  POST   /slack/users/sync/         Confirm matches {confirmations: [{person_id, slack_user_id}]}
+
+NUDGE SETTINGS
+  GET    /nudge-settings/           Org nudge schedule {nudge_enabled, first_days_before, second_hours_before}
+  PATCH  /nudge-settings/           Update schedule (first_days_before: 1/2/5, second_hours_before: 24/48/72)
+
+GMAIL
+  GET    /gmail/status/             {connected, email} — is org's Gmail connected?
+  GET    /gmail/oauth/start/        Redirect to Google OAuth — accepts ?auth=<JWT>
+  GET    /gmail/oauth/callback/     OAuth callback — stores access + refresh token on org
 ```
 
 ### Key commands
