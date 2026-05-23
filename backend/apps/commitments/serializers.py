@@ -48,11 +48,13 @@ class ExtractionFeedbackSerializer(serializers.ModelSerializer):
 
 
 class CommitmentSerializer(serializers.ModelSerializer):
-    owner_name    = serializers.SerializerMethodField()
-    meeting_title = serializers.SerializerMethodField()
-    is_overdue    = serializers.SerializerMethodField()
-    tags          = TagsField(required=False)
-    escalations   = EscalationEventSerializer(many=True, read_only=True)
+    owner_name        = serializers.SerializerMethodField()
+    meeting_title     = serializers.SerializerMethodField()
+    is_overdue        = serializers.SerializerMethodField()
+    needs_manual_nudge = serializers.SerializerMethodField()
+    urgency           = serializers.SerializerMethodField()
+    tags              = TagsField(required=False)
+    escalations       = EscalationEventSerializer(many=True, read_only=True)
 
     class Meta:
         model = Commitment
@@ -64,6 +66,7 @@ class CommitmentSerializer(serializers.ModelSerializer):
             'tags',
             'priority',
             'status', 'risk_score', 'is_overdue',
+            'needs_manual_nudge', 'urgency',
             'reviewed_at', 'resolved_at', 'resolution_note',
             'escalations',
             'created_at', 'updated_at',
@@ -82,6 +85,27 @@ class CommitmentSerializer(serializers.ModelSerializer):
 
     def get_is_overdue(self, obj):
         return obj.is_overdue()
+
+    def get_needs_manual_nudge(self, obj):
+        _nudgeable = {'active', 'at_risk', 'escalated', 'deferred'}
+        if obj.status not in _nudgeable:
+            return False
+        if not obj.deadline:
+            return False
+        return not obj.owner or not obj.owner.slack_user_id
+
+    def get_urgency(self, obj):
+        if not obj.deadline:
+            return None
+        from django.utils import timezone
+        days = (obj.deadline - timezone.now().date()).days
+        if days < 0:
+            return 'overdue'
+        if days == 0:
+            return 'due_today'
+        if days <= 3:
+            return 'due_soon'
+        return 'upcoming'
 
     def update(self, instance, validated_data):
         tag_labels = validated_data.pop('tags', None)

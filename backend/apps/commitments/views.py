@@ -1,5 +1,4 @@
-from django.db import models
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, mixins, filters, status
@@ -74,16 +73,6 @@ def _log(commitment, event_type, actor, old_value=None, new_value=None, note='')
             'method: slack (default) | email | phone | in_person | other. '
             'For slack, sends a DM if owner has slack_user_id. '
             'All methods log a NUDGED event in history.'
-        ),
-    ),
-    manual_nudge_queue=extend_schema(
-        tags=['commitments'],
-        summary='Manual nudge queue',
-        description=(
-            'Active/at-risk/overdue commitments whose owner cannot be auto-nudged '
-            '(no Slack user ID, or no owner). Ordered by deadline then risk score. '
-            'Use POST /commitments/{id}/nudge/ to log a manual nudge, '
-            'POST /commitments/{id}/log-update/ to record the owner\'s response.'
         ),
     ),
     log_update=extend_schema(
@@ -309,53 +298,6 @@ class CommitmentViewSet(
 
         _log(commitment, CommitmentEvent.EventType.NUDGED, _get_actor(request), note=log_note)
         return Response({'detail': 'Nudge logged.', 'method': method, 'channel': channel})
-
-    @action(detail=False, methods=['get'], url_path='manual-nudge-queue')
-    def manual_nudge_queue(self, request):
-        from django.utils import timezone as tz
-        org = get_user_org(request)
-        if org is None:
-            return Response([])
-
-        active_statuses = [
-            Commitment.Status.ACTIVE,
-            Commitment.Status.AT_RISK,
-            Commitment.Status.ESCALATED,
-            Commitment.Status.DEFERRED,
-        ]
-        today = tz.now().date()
-
-        qs = (
-            Commitment.objects
-            .filter(organisation=org, status__in=active_statuses, deadline__isnull=False)
-            .select_related('owner', 'meeting')
-            .prefetch_related('tags')
-            .filter(
-                models.Q(owner__isnull=True) |
-                models.Q(owner__slack_user_id='')
-            )
-            .order_by('deadline', '-risk_score')
-        )
-
-        results = []
-        for c in qs:
-            days = (c.deadline - today).days
-            if days < 0:
-                urgency = 'overdue'
-            elif days == 0:
-                urgency = 'due_today'
-            elif days <= 3:
-                urgency = 'due_soon'
-            else:
-                urgency = 'upcoming'
-
-            results.append({
-                **CommitmentSerializer(c, context={'request': request}).data,
-                'days_until_due': days,
-                'urgency':        urgency,
-            })
-
-        return Response(results)
 
     @action(detail=True, methods=['post'], url_path='log-update')
     def log_update(self, request, pk=None):
