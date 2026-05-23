@@ -1,0 +1,6 @@
+{
+  "name": "Verato",
+  "description": "The accountability layer for scale-up leaders. Extracts commitments from meetings, tracks ownership, and automates nudges before deadlines slip.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

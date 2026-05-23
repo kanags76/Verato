@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Professional Polish Palette */
+  --color-brand: #3b82f6; /* blue-500 */
+  --color-surface: #ffffff;
+  --color-panel: #f8fafc; /* slate-50 */
+  --color-sidebar-bg: #0f172a; /* slate-900 */
+  --color-border-custom: #e2e8f0; /* slate-200 */
+  --color-border-faint: #f1f5f9; /* slate-100 */
+  
+  --color-verato-bg: #f8fafc; /* slate-50 */
+  --color-verato-text: #0f172a; /* slate-900 */
+  --color-verato-text-mid: #475569; /* slate-600 */
+  --color-verato-text-faint: #94a3b8; /* slate-400 */
+  
+  --color-sage: #10b981; /* emerald-500 */
+  --color-amber: #f59e0b; /* amber-500 */
+  --color-rose: #ef4444; /* rose-500 */
+}
+
+@layer base {
+  body {
+    @apply bg-verato-bg text-verato-text font-sans antialiased selection:bg-brand/30;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-border-custom rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-brand/50;
+}
