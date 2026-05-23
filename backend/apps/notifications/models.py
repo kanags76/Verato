@@ -31,3 +31,11 @@ class NudgeLog(models.Model):
         db_table        = 'notifications_nudgelog'
         ordering        = ['-nudged_at']
         unique_together = [['commitment', 'nudge_type']]
+
+
+class NudgeDashboard(NudgeLog):
+    """Proxy used solely to add a Nudge Dashboard link in the admin sidebar."""
+    class Meta:
+        proxy        = True
+        app_label    = 'notifications'
+        verbose_name = verbose_name_plural = 'Nudge Dashboard'

@@ -1,0 +1,141 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+  .pip-grid   { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .pip-card   { background:var(--darkened-bg,#1c2730); border:1px solid var(--border-color,#415870); border-radius:6px; padding:16px 20px; }
+  .pip-card h3{ margin:0 0 6px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.07em; color:var(--body-quiet-color,#8a9ab0); }
+  .pip-card .val{ font-size:36px; font-weight:700; line-height:1; color:var(--body-fg,#dee0e3); }
+
+  .pip-section { background:var(--darkened-bg,#1c2730); border:1px solid var(--border-color,#415870); border-radius:6px; padding:16px 20px; margin-bottom:16px; }
+  .pip-section h2 { margin:0 0 14px; font-size:14px; font-weight:600; color:var(--body-fg,#dee0e3); }
+
+  .pip-table  { width:100%; border-collapse:collapse; font-size:13px; }
+  .pip-table th { padding:8px 12px; background:var(--header-bg,#264b5d); color:var(--header-color,#fff); font-weight:600; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .pip-table td { padding:8px 12px; border-bottom:1px solid var(--border-color,#415870); color:var(--body-fg,#dee0e3); vertical-align:top; }
+  .pip-table tr:last-child td { border-bottom:none; }
+  .pip-table .empty { color:var(--body-quiet-color,#8a9ab0); font-style:italic; }
+  .pip-table a { color:#79aec8; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:#fff; }
+  .divider { border:none; border-top:1px solid var(--border-color,#415870); margin:0 0 20px; }
+
+  .info-row { display:flex; gap:24px; flex-wrap:wrap; margin-bottom:20px; }
+  .info-item { background:var(--darkened-bg,#1c2730); border:1px solid var(--border-color,#415870); border-radius:6px; padding:12px 18px; font-size:13px; color:var(--body-fg,#dee0e3); }
+  .info-item strong { color:var(--body-quiet-color,#8a9ab0); font-weight:600; font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px; }
+</style>
+
+<hr class="divider">
+
+{% if schedule_info %}
+<div class="info-row">
+  <div class="info-item">
+    <strong>Schedule</strong>
+    {{ schedule_info.crontab }} UTC daily
+  </div>
+  <div class="info-item">
+    <strong>Last run</strong>
+    {% if schedule_info.last_run_at %}{{ schedule_info.last_run_at|date:"d M Y H:i" }}{% else %}Never{% endif %}
+  </div>
+  <div class="info-item">
+    <strong>Total runs</strong>
+    {{ schedule_info.total_run_count }}
+  </div>
+  <div class="info-item">
+    <strong>Enabled</strong>
+    {% if schedule_info.enabled %}<span style="color:#10b981">Yes</span>{% else %}<span style="color:#ef4444">No</span>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if org_settings_list %}
+<div class="pip-section">
+  <h2>⚙ Org Nudge Settings</h2>
+  <table class="pip-table">
+    <thead><tr><th>Organisation</th><th>First Reminder</th><th>Second Reminder</th><th>Post-due</th></tr></thead>
+    <tbody>
+      {% for s in org_settings_list %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ s.first_days }} day{% if s.first_days != 1 %}s{% endif %} before</td>
+        <td>{{ s.second_hours }}h before</td>
+        <td>Day +1, +2, +3</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Nudge type totals -->
+<div class="pip-grid">
+  {% for key, tc in type_counts.items %}
+  <div class="pip-card">
+    <h3>{{ tc.label }}</h3>
+    <div class="val" style="font-size:28px;">{{ tc.count }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Recent task runs -->
+{% if task_results %}
+<div class="pip-section">
+  <h2>⚡ Recent Task Runs (send_deadline_nudges)</h2>
+  <table class="pip-table">
+    <thead><tr><th>Ran at</th><th>Status</th><th>Result</th><th>Runtime</th></tr></thead>
+    <tbody>
+      {% for r in task_results %}
+      <tr>
+        <td>{{ r.date_done|date:"d M Y H:i" }}</td>
+        <td>
+          {% if r.status == 'SUCCESS' %}
+            <span class="badge" style="background:#10b981">SUCCESS</span>
+          {% elif r.status == 'FAILURE' %}
+            <span class="badge" style="background:#ef4444">FAILURE</span>
+          {% else %}
+            <span class="badge" style="background:#6b7280">{{ r.status }}</span>
+          {% endif %}
+        </td>
+        <td style="font-family:monospace;font-size:12px;">{{ r.result|truncatechars:120 }}</td>
+        <td>{% if r.task_kwargs %}—{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Recent nudges sent -->
+<div class="pip-section">
+  <h2>📋 Recent Nudges Sent (last 20)</h2>
+  <table class="pip-table">
+    <thead><tr><th>Sent at</th><th>Type</th><th>Person</th><th>Commitment</th></tr></thead>
+    <tbody>
+      {% if recent %}
+        {% for row in recent %}
+        <tr>
+          <td>{{ row.obj.nudged_at|date:"d M Y H:i" }}</td>
+          <td>
+            <span class="badge" style="background:{{ row.colour }}">
+              {{ row.obj.get_nudge_type_display }}
+            </span>
+          </td>
+          <td>{% if row.obj.person %}{{ row.obj.person.name }}{% else %}<span style="color:#6b7280">CoS</span>{% endif %}</td>
+          <td>
+            {% if row.obj.commitment %}
+              <a href="/admin/commitments/commitment/{{ row.obj.commitment_id }}/change/">
+                {{ row.obj.commitment.normalised_text|truncatechars:60 }}
+              </a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="4" class="empty">No nudges sent yet</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  <p style="margin:12px 0 0;font-size:12px;color:var(--body-quiet-color,#8a9ab0);">
+    <a href="/admin/notifications/nudgelog/" style="color:#79aec8">View full nudge history →</a>
+  </p>
+</div>
+{% endblock %}
