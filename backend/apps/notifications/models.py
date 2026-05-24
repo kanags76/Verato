@@ -120,8 +120,10 @@ class InAppNotification(models.Model):
     click or Gmail reply parse. Frontend polls /api/v1/notifications/ for these.
     """
     class Type(models.TextChoices):
-        SLACK_REPLY  = 'slack_reply',  'Slack Reply'
-        GMAIL_REPLY  = 'gmail_reply',  'Gmail Reply'
+        SLACK_REPLY     = 'slack_reply',    'Slack Reply'
+        GMAIL_REPLY     = 'gmail_reply',    'Gmail Reply'
+        MEETING_READY   = 'meeting_ready',  'Meeting Ready'
+        MEETING_FAILED  = 'meeting_failed', 'Meeting Failed'
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organisation = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')

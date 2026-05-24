@@ -2,6 +2,7 @@ import logging
 from datetime import date
 
 from celery import shared_task
+from celery.exceptions import MaxRetriesExceededError
 from django.db.models import F
 from django.utils import timezone
 
@@ -164,13 +165,27 @@ def process_meeting(self, meeting_id: str):
                 "process_meeting (pass1, no clarifications): %s → %d commitments, %d topics, type=%s",
                 meeting_id, created, len(result["topics"]), result["meeting_type"],
             )
+            from apps.notifications.views import create_cos_notification
+            create_cos_notification(
+                org, None,
+                f'{created} commitment{"s" if created != 1 else ""} extracted from "{meeting.title}" — ready to review.',
+                'meeting_ready',
+            )
 
     except Exception as exc:
         logger.error("process_meeting: failed for %s: %s", meeting_id, exc)
         meeting.processing_status = Meeting.ProcessingStatus.FAILED
         meeting.processing_error  = str(exc)[:2000]
         meeting.save(update_fields=['processing_status', 'processing_error'])
-        raise self.retry(exc=exc, countdown=30)
+        try:
+            raise self.retry(exc=exc, countdown=30)
+        except MaxRetriesExceededError:
+            from apps.notifications.views import create_cos_notification
+            create_cos_notification(
+                meeting.organisation, None,
+                f'Processing failed for "{meeting.title}". Check the meeting in the app for details.',
+                'meeting_failed',
+            )
 
 
 @shared_task(bind=True, max_retries=2)
@@ -222,13 +237,27 @@ def process_meeting_pass2(self, meeting_id: str):
             "process_meeting_pass2: %s → %d commitments, %d topics, type=%s",
             meeting_id, created, len(result["topics"]), result["meeting_type"],
         )
+        from apps.notifications.views import create_cos_notification
+        create_cos_notification(
+            org, None,
+            f'{created} commitment{"s" if created != 1 else ""} extracted from "{meeting.title}" — ready to review.',
+            'meeting_ready',
+        )
 
     except Exception as exc:
         logger.error("process_meeting_pass2: failed for %s: %s", meeting_id, exc)
         meeting.processing_status = Meeting.ProcessingStatus.FAILED
         meeting.processing_error  = str(exc)[:2000]
         meeting.save(update_fields=['processing_status', 'processing_error'])
-        raise self.retry(exc=exc, countdown=30)
+        try:
+            raise self.retry(exc=exc, countdown=30)
+        except MaxRetriesExceededError:
+            from apps.notifications.views import create_cos_notification
+            create_cos_notification(
+                meeting.organisation, None,
+                f'Processing failed for "{meeting.title}". Check the meeting in the app for details.',
+                'meeting_failed',
+            )
 
 
 @shared_task(bind=True, max_retries=2)
