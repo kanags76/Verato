@@ -250,6 +250,11 @@ export const CommitmentDetail = () => {
   };
 
   const handleReviewCompleted = async () => {
+    if (!editedDeadline || editedDeadline.trim() === "") {
+      setNudgeMessage({ type: 'error', text: 'Deadline is required to mark as reviewed.' });
+      return;
+    }
+
     // First update the metadata
     await updateMutation.mutateAsync({
       normalised_text: editedTitle,
@@ -653,6 +658,7 @@ export const CommitmentDetail = () => {
                       value={editedDeadline}
                       onChange={(e) => {
                         setEditedDeadline(e.target.value);
+                        setNudgeMessage(null);
                         setIsEditingDeadline(false);
                       }}
                       onBlur={() => setIsEditingDeadline(false)}
@@ -872,6 +878,7 @@ export const CommitmentDetail = () => {
                                 </span>
                               </div>
 
+                              {/* History message or activity_detail */}
                               {item.message ? (
                                 <p className="text-sm text-slate-700 leading-relaxed font-bold">
                                   {item.message}
@@ -881,6 +888,26 @@ export const CommitmentDetail = () => {
                                   {typeof item.activity_detail === 'string' ? item.activity_detail : JSON.stringify(item.activity_detail)}
                                 </p>
                               ) : null}
+
+                              {/* Extract note from item or activity_detail if JSON */}
+                              {(() => {
+                                let noteToDisplay = item.note || item.notes;
+                                if (!noteToDisplay && typeof item.activity_detail === 'string') {
+                                  try {
+                                    const parsedDetail = JSON.parse(item.activity_detail);
+                                    if (parsedDetail && (parsedDetail.note || parsedDetail.notes)) {
+                                      noteToDisplay = parsedDetail.note || parsedDetail.notes;
+                                    }
+                                  } catch (e) {
+                                    // Not JSON
+                                  }
+                                }
+                                return noteToDisplay ? (
+                                  <div className="mt-3 p-3 bg-blue-50 rounded-xl border border-blue-100 italic text-sm text-blue-900 leading-relaxed">
+                                    {noteToDisplay}
+                                  </div>
+                                ) : null;
+                              })()}
 
                               {/* Structured Metadata details block */}
                               {(showLabel || showType || showActor || showTarget || showOutcome) && (

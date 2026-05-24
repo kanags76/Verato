@@ -1,11 +1,10 @@
-# Verato — Data Model (MVP Complete)
+# Verato — Data Model (Current — W13.6)
 
 > **Database:** PostgreSQL 18 (no extensions required for MVP)
 > **ORM:** Django 6.x
 > **Multi-tenancy:** All models scoped to `Organisation` via FK
-> **MVP scope:** No pgvector, no embeddings, no Conflict model, no OrgCalibration model
-> **Phase 1 complete:** All models built, migrated, tested — 326 tests passing
-> **Phase 2 additions noted inline** — schema is designed to accept them without breaking changes
+> **Current state:** All models built, migrated, deployed to production
+> **Last updated:** 2026-05-24
 
 ---
 
@@ -53,14 +52,24 @@ Organisation (plan: individual|team)
     ├── ExtractionFeedback
     │       └── commitment → Commitment
     │
-    └── NudgeLog (Week 6 — prevents double-nudging within 20h)
-            └── commitment → Commitment
+    ├── NudgeLog (Week 6 — prevents double-nudging; tracks Gmail thread IDs)
+    │       └── commitment → Commitment
+    │
+    ├── GmailPollLog (W12 — one row per poll run per org)
+    │       └── organisation → Organisation
+    │
+    └── InAppNotification (W13.5 — per-org alerts for CoS)
+            ├── organisation → Organisation
+            └── commitment → Commitment (nullable)
 
-── Phase 2 additions (not built in MVP) ──────────────────────────
+── V2 additions (planned, not yet built) ─────────────────────────
     ├── Conflict (commitment_a, commitment_b, type, confidence)
     ├── OrgCalibration (one-to-one with Organisation)
     ├── Commitment.embedding (vector field — add via migration)
-    └── PersonGraph API endpoint (aggregates existing tables)
+    ├── StrategicPillar + CommitmentPillarLink
+    ├── FrictionSignal
+    ├── Department + PersonHealthSnapshot
+    └── NudgeReply (bidirectional nudge intelligence)
 ```
 
 ---
@@ -94,12 +103,23 @@ class Organisation(models.Model):
     plan     = models.CharField(max_length=20, choices=Plan.choices, default=Plan.INDIVIDUAL)
     created_at = models.DateTimeField(auto_now_add=True)
     settings   = models.JSONField(default=dict)
-    # settings keys used in MVP:
-    # - slack_token: str — per-org bot token from Slack OAuth (overrides global SLACK_BOT_TOKEN)
+    # settings keys (current):
+    # Slack
+    # - slack_token: str — per-org bot token from Slack OAuth
     # - slack_workspace_id: str
     # - slack_workspace_name: str
+    # Gmail
+    # - gmail_access_token: str
+    # - gmail_refresh_token: str
+    # - gmail_email: str
+    # - gmail_polling_enabled: bool (default False)
+    # - gmail_poll_interval_minutes: int (15/30/60/120, default 30)
+    # Nudge engine
+    # - nudge_enabled: bool (default False)
+    # - nudge_first_days_before: int (1/2/5, default 2)
+    # - nudge_second_hours_before: int (24/48/72, default 48)
+    # Org config
     # - confidence_threshold: float (default 0.65)
-    # - nudge_hours_before: int (default 48)
     # - digest_day: str (default "monday")
     # - digest_hour: int (default 7)
 

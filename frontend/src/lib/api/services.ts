@@ -337,3 +337,33 @@ export const nudgeSettingsService = {
   },
 };
 
+export const notificationService = {
+  getAll: async (params?: { page?: number }): Promise<{ results: any[], count: number, next: string | null, previous: string | null }> => {
+    const page = params?.page || 1;
+    const { data } = await apiClient.get(`notifications/?page=${page}`);
+    
+    if (Array.isArray(data)) {
+      return { results: data, count: data.length, next: null, previous: null };
+    }
+    
+    if (data && data.results) {
+      return data;
+    }
+    
+    return { results: [], count: 0, next: null, previous: null };
+  },
+  getUnreadCount: async (): Promise<{ unread: number }> => {
+    const { data } = await apiClient.get('notifications/unread-count/');
+    if (typeof data === 'number') {
+      return { unread: data };
+    }
+    return data || { unread: 0 };
+  },
+  markAsRead: async (id: string): Promise<void> => {
+    await apiClient.post(`notifications/${id}/read/`);
+  },
+  markAllRead: async (): Promise<void> => {
+    await apiClient.post('notifications/mark-all-read/');
+  },
+};
+

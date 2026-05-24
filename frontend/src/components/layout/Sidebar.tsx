@@ -5,12 +5,15 @@ import {
   Calendar, 
   Settings, 
   LogOut,
-  ChevronRight
+  ChevronRight,
+  User
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { cn } from "@/src/lib/utils";
 import { useUI } from "./AppShell";
+import { useQuery } from "@tanstack/react-query";
+import { authService } from "../../lib/api/auth";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -25,6 +28,14 @@ export const Sidebar = () => {
   const { logout } = useAuth();
   const { openUploadModal } = useUI();
 
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => authService.getProfile(),
+  });
+
+  const userName = profile?.name || "...";
+  const userRole = (profile as any)?.role || (profile as any)?.title || (profile?.is_org_admin ? "Chief of Staff" : "Team Member");
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -34,7 +45,7 @@ export const Sidebar = () => {
     <div className="w-64 h-screen border-r border-slate-800 bg-sidebar-bg flex flex-col fixed left-0 top-0 text-white z-50">
       <div className="p-6 flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center font-bold text-xl uppercase">V</div>
-        <span className="font-semibold tracking-tight text-white">Verato Dashboard</span>
+        <span className="font-semibold tracking-tight text-white">Verato</span>
       </div>
 
       <nav className="flex-1 px-4 py-4 space-y-1">
@@ -67,6 +78,17 @@ export const Sidebar = () => {
           <UploadCloud className="w-5 h-5" />
           Upload Transcript
         </button>
+        
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+            <User className="w-5 h-5" />
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <p className="text-sm font-bold text-white truncate">{userName}</p>
+            <p className="text-[10px] text-slate-400 font-mono uppercase tracking-widest truncate">{userRole}</p>
+          </div>
+        </div>
+
         <button 
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors group"

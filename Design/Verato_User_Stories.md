@@ -261,10 +261,22 @@ I want to: See whether Slack is connected, test it, and reconnect if needed
 So that: I can trust nudges are actually getting through
 Acceptance criteria
 - Settings → Slack tab
-- If connected: green status card with workspace name + "● Connected" pill
+- If connected: green status card with workspace name + "● Connected" pill + Disconnect button
 - If not connected: "Add to Slack" CTA (matches onboarding screen)
 - Section to enter / verify the Admin's own Slack user ID with helper copy
-API needs: ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/ · ✅ POST /api/v1/persons/{id}/link-slack/ to set slack_user_id
+API needs: ✅ GET /api/v1/slack/status/ · ✅ POST /api/v1/slack/test-message/ · ✅ POST /api/v1/persons/{id}/link-slack/ · ✅ POST /api/v1/slack/disconnect/
+
+## US-6.4 — Manage Gmail integration
+As an: Admin
+I want to: Connect my Gmail account so Verato can send nudge emails and read replies
+So that: I have a full email nudge loop without leaving Verato
+Acceptance criteria
+- Settings → Gmail tab
+- If connected: green status, email address shown, Disconnect button
+- If not connected: "Connect Gmail" CTA starts OAuth flow
+- Polling frequency configurable (15 / 30 / 60 / 120 min) with enable/disable toggle
+- Note: Gmail API must be enabled in Google Cloud Console for the OAuth project
+API needs: ✅ GET /api/v1/gmail/status/ · ✅ GET /api/v1/gmail/oauth/start/ · ✅ POST /api/v1/gmail/disconnect/ · ✅ PATCH /api/v1/nudge-settings/ (polling frequency)
 
 ## US-6.3 — Tune extraction confidence threshold
 As an: Admin
@@ -328,6 +340,31 @@ So that: Verato saves time, not consumes it
 - All primary actions are 1 click from dashboard
 - Status filters are tabs, not dropdowns
 - Keyboard nav (planned): J/K through rows, Enter to open, ⌘K command palette
+
+# Epic 8 — In-app notifications
+
+## US-8.1 — See owner responses without checking email or Slack
+As a: CoS
+I want to: See a notification badge in the app whenever an owner responds to a nudge
+So that: I always know when something has changed without switching context
+Acceptance criteria
+- Bell icon in the top nav shows a red badge with unread count
+- Clicking the bell opens a notification feed
+- Each notification shows: who responded, what commitment, what they did (Done / Delayed / Blocked / email reply)
+- Clicking a notification goes directly to the commitment detail
+- Marking one or all as read clears the badge
+- Notifications are created instantly on Slack button clicks; within the polling window for Gmail replies (30 min default)
+API needs: ✅ GET /api/v1/notifications/ · ✅ GET /api/v1/notifications/unread-count/ · ✅ POST /api/v1/notifications/<id>/read/ · ✅ POST /api/v1/notifications/mark-all-read/
+
+## US-8.2 — Understand what the owner actually said
+As a: CoS
+I want: The notification to tell me the intent of the reply, not just that a reply came in
+So that: I can act on it without opening the email or Slack thread
+Acceptance criteria
+- Notification message is human-readable: "Sarah marked 'Send slides to board' as Done via Slack"
+- For Gmail replies: intent is Gemini-parsed (done / deferred / blocked / replied) and surfaced in the message
+- If Gemini couldn't parse the intent, notification still fires with "replied via email"
+API needs: ✅ Gemini parse in poll_gmail_replies task · ✅ create_cos_notification called after parse
 
 # Out of scope for v0.3 (deferred user stories)
 These have been considered and intentionally postponed:

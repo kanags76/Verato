@@ -50,6 +50,8 @@ export interface CommitmentHistory {
   performed_by_name?: string;
   label?: string;
   type?: string;
+  note?: string;
+  notes?: string;
 }
 
 export interface Meeting {
@@ -77,6 +79,15 @@ export interface Clarification {
   context: string;
   answer: string;
   order: number;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  commitment_id?: string;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface Person {

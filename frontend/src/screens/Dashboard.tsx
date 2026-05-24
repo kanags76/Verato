@@ -416,13 +416,13 @@ export const Dashboard = () => {
       {/* Header section */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">Command Centre</h1>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">Dashboard</h1>
           <p className="text-slate-500 font-medium tracking-tight">Week of {format(weekStart, "MMM d, yyyy")}</p>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 md:gap-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-5">
         {statCards.map((stat, idx) => (
             <motion.div
             key={stat.label}
@@ -433,20 +433,20 @@ export const Dashboard = () => {
             className="cursor-pointer group h-full"
           >
             <Card className={cn(
-              "relative h-full overflow-hidden bg-white shadow-sm transition-all border-slate-200 hover:shadow-md flex flex-col justify-between p-4",
+              "relative h-full overflow-hidden bg-white shadow-sm transition-all border-slate-200 hover:shadow-md flex flex-col justify-between py-2.5 px-4",
               activeTab === stat.id && "ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/10"
             )}>
-              <div className="flex items-start justify-between relative z-10 mb-4">
-                <div className={cn("p-2 rounded-lg", stat.bg)}>
-                  <stat.icon className={cn("w-4 h-4 md:w-5 md:h-5", stat.color)} />
+              <div className="flex items-start justify-between relative z-10 mb-2">
+                <div className={cn("p-1.5 rounded-lg", stat.bg)}>
+                  <stat.icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4", stat.color)} />
                 </div>
               </div>
               
               <div className="relative z-10 w-full overflow-hidden">
-                <p className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1 leading-none truncate" title={stat.label}>
+                <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5 leading-none truncate" title={stat.label}>
                   {stat.label}
                 </p>
-                <p className="text-2xl md:text-3xl font-black text-slate-900 font-mono tracking-tighter">
+                <p className="text-xl md:text-2xl font-black text-slate-900 font-mono tracking-tighter">
                   {stat.count}
                 </p>
               </div>

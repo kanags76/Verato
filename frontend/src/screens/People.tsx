@@ -154,35 +154,36 @@ export const People = () => {
           <p className="text-slate-500 font-medium tracking-tight">Manage stakeholders and project contributors identified from transcripts.</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative group flex-1 md:flex-none">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 w-full">
+          <div className="relative group w-full lg:w-80">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
             <input 
               type="text" 
               placeholder="Filter by name or role..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-full md:w-80 shadow-sm font-bold"
+              className="bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-full shadow-sm font-bold"
             />
           </div>
-          <Button 
-            variant="secondary" 
-            className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0"
-            onClick={() => setShowSlackImportModal(true)}
-            disabled={!slackStatus?.connected}
-          >
-            <Slack className="w-4 h-4 text-[#4A154B]" />
-            <span className="hidden lg:inline">Link/Import People</span>
-            <span className="inline lg:hidden">Import</span>
-          </Button>
-          <Button 
-            variant="secondary" 
-            className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0"
-            onClick={() => setShowAddModal(true)}
-          >
-            <UserPlus className="w-4 h-4" />
-            <span className="hidden md:inline">Add Person</span>
-          </Button>
+          <div className="flex flex-wrap items-stretch gap-2.5">
+            <Button 
+              variant="secondary" 
+              className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0 justify-center px-4 animate-duration-100"
+              onClick={() => setShowSlackImportModal(true)}
+              disabled={!slackStatus?.connected}
+            >
+              <Slack className="w-4 h-4 text-[#4A154B]" />
+              <span>Link/Import People</span>
+            </Button>
+            <Button 
+              variant="secondary" 
+              className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0 justify-center px-4"
+              onClick={() => setShowAddModal(true)}
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Person</span>
+            </Button>
+          </div>
         </div>
       </div>
 
