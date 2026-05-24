@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.utils.html import format_html, mark_safe
 
-from .models import NudgeLog, NudgeDashboard, GmailPollLog, InAppNotification, CalendarEvent, CalendarConnection
+from .models import NudgeLog, NudgeDashboard, GmailPollLog, InAppNotification, CalendarEvent, CalendarConnection, ZoomConnection, ZoomRecording
 
 
 # ── NudgeLog ──────────────────────────────────────────────────────────────────
@@ -265,3 +265,69 @@ class CalendarEventAdmin(admin.ModelAdmin):
         if not obj.drive_file_id:
             return '—'
         return obj.drive_file_id[:16] + '…'
+
+
+# ── ZoomConnection ────────────────────────────────────────────────────────────
+
+@admin.register(ZoomConnection)
+class ZoomConnectionAdmin(admin.ModelAdmin):
+    list_display    = ['organisation', 'zoom_email', 'zoom_account_id',
+                       'last_event_at_display', 'connected_at']
+    readonly_fields = ['id', 'organisation', 'zoom_email', 'zoom_account_id',
+                       'connected_at', 'last_event_at', 'access_token', 'refresh_token', 'token_expiry']
+    ordering        = ['-connected_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Last webhook', ordering='last_event_at')
+    def last_event_at_display(self, obj):
+        return obj.last_event_at.strftime('%-d %b %Y %H:%M') if obj.last_event_at else '—'
+
+
+# ── ZoomRecording ─────────────────────────────────────────────────────────────
+
+_ZOOM_STATUS_COLOURS = {
+    'pending':       '#6b7280',
+    'fetching':      '#3b82f6',
+    'processing':    '#8b5cf6',
+    'done':          '#22c55e',
+    'no_transcript': '#f59e0b',
+    'failed':        '#ef4444',
+}
+
+
+@admin.register(ZoomRecording)
+class ZoomRecordingAdmin(admin.ModelAdmin):
+    list_display    = ['started_at_display', 'title', 'organisation', 'status_badge',
+                       'duration_mins', 'meeting_link', 'updated_at']
+    list_filter     = ['status', 'organisation']
+    search_fields   = ['title', 'zoom_meeting_id', 'zoom_meeting_uuid']
+    readonly_fields = ['id', 'organisation', 'zoom_meeting_id', 'zoom_meeting_uuid', 'title',
+                       'started_at', 'duration_mins', 'download_url', 'status', 'meeting',
+                       'error', 'created_at', 'updated_at']
+    ordering        = ['-started_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Started at', ordering='started_at')
+    def started_at_display(self, obj):
+        return obj.started_at.strftime('%-d %b %Y %H:%M')
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colour = _ZOOM_STATUS_COLOURS.get(obj.status, '#6b7280')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">{}</span>',
+            colour, obj.get_status_display(),
+        )
+
+    @admin.display(description='Meeting')
+    def meeting_link(self, obj):
+        if not obj.meeting_id:
+            return '—'
+        return format_html(
+            '<a href="/admin/meetings/meeting/{}/change/">{}</a>',
+            obj.meeting_id, str(obj.meeting_id)[:8],
+        )

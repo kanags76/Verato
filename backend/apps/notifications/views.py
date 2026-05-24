@@ -1047,3 +1047,242 @@ def calendar_disconnect(request):
     org = getattr(request.user, 'organisation', None)
     CalendarConnection.objects.filter(organisation=org).delete()
     return Response({'detail': 'Google Calendar disconnected.'})
+
+
+# ── Zoom ──────────────────────────────────────────────────────────────────────
+
+@extend_schema(tags=['zoom'], summary='Zoom connection status')
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def zoom_status(request):
+    from .models import ZoomConnection
+    org = getattr(request.user, 'organisation', None)
+    try:
+        conn = ZoomConnection.objects.get(organisation=org)
+        return Response({'connected': True, 'email': conn.zoom_email, 'account_id': conn.zoom_account_id})
+    except ZoomConnection.DoesNotExist:
+        return Response({'connected': False})
+
+
+@extend_schema(tags=['zoom'], summary='Start Zoom OAuth flow')
+@require_GET
+def zoom_oauth_start(request):
+    token = request.GET.get('auth', '')
+    if not token:
+        return HttpResponse('Missing auth token.', status=400)
+
+    state = signing.dumps({'jwt': token}, salt='zoom-oauth')
+    from urllib.parse import urlencode
+    params = urlencode({
+        'response_type': 'code',
+        'client_id':     settings.ZOOM_CLIENT_ID,
+        'redirect_uri':  settings.ZOOM_OAUTH_REDIRECT_URI,
+        'state':         state,
+    })
+    return HttpResponseRedirect(f'https://zoom.us/oauth/authorize?{params}')
+
+
+@extend_schema(tags=['zoom'], summary='Zoom OAuth callback')
+@require_GET
+@csrf_exempt
+def zoom_oauth_callback(request):
+    import base64
+    import requests as http_requests
+    from .models import ZoomConnection
+
+    code  = request.GET.get('code', '')
+    state = request.GET.get('state', '')
+    if not code or not state:
+        return _close_window_response('Missing code or state.', error=True)
+
+    try:
+        data      = signing.loads(state, salt='zoom-oauth', max_age=3600)
+        jwt_token = data['jwt']
+    except signing.BadSignature:
+        return _close_window_response('Invalid state parameter.', error=True)
+
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        token_obj = AccessToken(jwt_token)
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.get(id=token_obj['user_id'])
+        org  = user.organisation
+        if org is None:
+            return _close_window_response('User has no organisation.', error=True)
+    except Exception as exc:
+        logger.error("Zoom OAuth JWT resolve failed: %s", exc)
+        return _close_window_response('Authentication error. Please try again.', error=True)
+
+    # Exchange code for tokens
+    try:
+        credentials = base64.b64encode(
+            f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
+        ).decode()
+        resp = http_requests.post(
+            'https://zoom.us/oauth/token',
+            params={
+                'grant_type':   'authorization_code',
+                'code':         code,
+                'redirect_uri': settings.ZOOM_OAUTH_REDIRECT_URI,
+            },
+            headers={'Authorization': f'Basic {credentials}'},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        token_data = resp.json()
+    except Exception as exc:
+        logger.error("Zoom token exchange failed: %s", exc)
+        return _close_window_response('Failed to connect Zoom. Please try again.', error=True)
+
+    access_token  = token_data.get('access_token', '')
+    refresh_token = token_data.get('refresh_token', '')
+    expires_in    = token_data.get('expires_in', 3600)
+
+    # Get Zoom user info
+    try:
+        me = http_requests.get(
+            'https://api.zoom.us/v2/users/me',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        ).json()
+        zoom_email      = me.get('email', '')
+        zoom_account_id = me.get('account_id', '')
+    except Exception:
+        zoom_email = zoom_account_id = ''
+
+    from django.utils import timezone
+    from datetime import timedelta
+    ZoomConnection.objects.update_or_create(
+        organisation=org,
+        defaults={
+            'access_token':    access_token,
+            'refresh_token':   refresh_token,
+            'token_expiry':    timezone.now() + timedelta(seconds=expires_in),
+            'zoom_email':      zoom_email,
+            'zoom_account_id': zoom_account_id,
+        },
+    )
+    logger.info("Zoom connected for org %s (%s)", org.slug, zoom_email)
+    return _close_window_response('Zoom connected successfully! ✓')
+
+
+@extend_schema(tags=['zoom'], summary='Disconnect Zoom')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def zoom_disconnect(request):
+    from .models import ZoomConnection
+    org = getattr(request.user, 'organisation', None)
+    ZoomConnection.objects.filter(organisation=org).delete()
+    return Response({'detail': 'Zoom disconnected.'})
+
+
+@extend_schema(exclude=True)
+@csrf_exempt
+@require_POST
+def zoom_webhook(request):
+    """
+    Receives Zoom webhook events. Verifies HMAC-SHA256 signature.
+    Handles:
+      - endpoint.url_validation  (one-time setup challenge)
+      - recording.completed      (download VTT transcript and process)
+    """
+    import hashlib
+    import hmac
+    import json
+    from .models import ZoomConnection, ZoomRecording
+    from .tasks import fetch_zoom_transcript
+
+    # Signature verification
+    timestamp = request.headers.get('x-zm-request-timestamp', '')
+    signature = request.headers.get('x-zm-signature', '')
+    secret    = settings.ZOOM_WEBHOOK_SECRET
+
+    if secret:
+        message  = f'v0:{timestamp}:{request.body.decode()}'
+        expected = 'v0=' + hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            logger.warning("zoom_webhook: invalid signature")
+            return HttpResponse(status=401)
+
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponse(status=400)
+
+    event = payload.get('event', '')
+
+    # ── URL validation (Zoom setup handshake) ─────────────────────────────────
+    if event == 'endpoint.url_validation':
+        plain_token = payload.get('payload', {}).get('plainToken', '')
+        hashed = hmac.new(secret.encode(), plain_token.encode(), hashlib.sha256).hexdigest()
+        return HttpResponse(
+            json.dumps({'plainToken': plain_token, 'encryptedToken': hashed}),
+            content_type='application/json',
+        )
+
+    # ── Recording completed ───────────────────────────────────────────────────
+    if event == 'recording.completed':
+        obj            = payload.get('payload', {}).get('object', {})
+        download_token = payload.get('download_token', '')
+        meeting_uuid   = obj.get('uuid', '')
+        account_id     = obj.get('account_id', obj.get('host_id', ''))
+
+        # Find org by Zoom account_id
+        try:
+            conn = ZoomConnection.objects.get(zoom_account_id=account_id)
+        except ZoomConnection.DoesNotExist:
+            # Try matching by host email if account_id not set
+            host_email = obj.get('host_email', '')
+            try:
+                conn = ZoomConnection.objects.get(zoom_email=host_email)
+            except ZoomConnection.DoesNotExist:
+                logger.warning("zoom_webhook: no connection found for account_id=%s", account_id)
+                return HttpResponse(status=200)
+
+        org = conn.organisation
+
+        # Find VTT transcript file
+        transcript_url = ''
+        for f in obj.get('recording_files', []):
+            if f.get('file_type') == 'TRANSCRIPT' and f.get('status') == 'completed':
+                transcript_url = f.get('download_url', '')
+                break
+
+        # Update last_event_at
+        from django.utils import timezone
+        conn.last_event_at = timezone.now()
+        conn.save(update_fields=['last_event_at'])
+
+        if not transcript_url:
+            logger.info("zoom_webhook: no transcript file for meeting %s", meeting_uuid)
+            return HttpResponse(status=200)
+
+        # Create ZoomRecording (deduplicated by meeting_uuid)
+        started_at_str = obj.get('start_time', '')
+        try:
+            from dateutil.parser import parse as parse_dt
+            started_at = parse_dt(started_at_str) if started_at_str else timezone.now()
+        except Exception:
+            started_at = timezone.now()
+
+        recording, created = ZoomRecording.objects.get_or_create(
+            organisation=org,
+            zoom_meeting_uuid=meeting_uuid,
+            defaults={
+                'zoom_meeting_id': str(obj.get('id', '')),
+                'title':           obj.get('topic', 'Zoom Recording'),
+                'started_at':      started_at,
+                'duration_mins':   int(obj.get('duration', 0)),
+                'download_url':    transcript_url,
+                'download_token':  download_token,
+                'status':          ZoomRecording.Status.PENDING,
+            },
+        )
+
+        if created:
+            fetch_zoom_transcript.delay(str(recording.id))
+            logger.info("zoom_webhook: queued transcript fetch for meeting %s", meeting_uuid)
+        else:
+            logger.info("zoom_webhook: duplicate event for meeting %s — skipped", meeting_uuid)
+
+    return HttpResponse(status=200)

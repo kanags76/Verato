@@ -114,6 +114,53 @@ class CalendarEvent(models.Model):
         ordering        = ['-starts_at']
 
 
+class ZoomConnection(models.Model):
+    """Per-org Zoom OAuth connection. Receives recording.completed webhooks."""
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation    = models.OneToOneField('accounts.Organisation', on_delete=models.CASCADE, related_name='zoom_connection')
+    access_token    = models.TextField(blank=True)
+    refresh_token   = models.TextField(blank=True)
+    token_expiry    = models.DateTimeField(null=True, blank=True)
+    zoom_email      = models.EmailField(blank=True)
+    zoom_account_id = models.CharField(max_length=64, blank=True)
+    connected_at    = models.DateTimeField(auto_now_add=True)
+    last_event_at   = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'notifications_zoomconnection'
+
+
+class ZoomRecording(models.Model):
+    """One row per Zoom cloud recording received via webhook."""
+    class Status(models.TextChoices):
+        PENDING       = 'pending',       'Pending'
+        FETCHING      = 'fetching',      'Fetching transcript'
+        PROCESSING    = 'processing',    'Processing'
+        DONE          = 'done',          'Done'
+        NO_TRANSCRIPT = 'no_transcript', 'No transcript found'
+        FAILED        = 'failed',        'Failed'
+
+    id                = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation      = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='zoom_recordings')
+    zoom_meeting_id   = models.CharField(max_length=255)
+    zoom_meeting_uuid = models.CharField(max_length=255, blank=True)
+    title             = models.CharField(max_length=500)
+    started_at        = models.DateTimeField()
+    duration_mins     = models.IntegerField(default=0)
+    download_url      = models.URLField(max_length=2000, blank=True)
+    download_token    = models.TextField(blank=True)
+    status            = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    meeting           = models.ForeignKey('meetings.Meeting', null=True, blank=True, on_delete=models.SET_NULL, related_name='zoom_recording')
+    error             = models.TextField(blank=True)
+    created_at        = models.DateTimeField(auto_now_add=True)
+    updated_at        = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'notifications_zoomrecording'
+        unique_together = [['organisation', 'zoom_meeting_uuid']]
+        ordering        = ['-started_at']
+
+
 class InAppNotification(models.Model):
     """
     Per-user in-app alert. Created when a commitment is updated via Slack button

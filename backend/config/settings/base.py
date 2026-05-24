@@ -139,6 +139,11 @@ SLACK_CLIENT_ID      = config('SLACK_CLIENT_ID',      default='')
 SLACK_CLIENT_SECRET  = config('SLACK_CLIENT_SECRET',  default='')
 SLACK_OAUTH_REDIRECT_URI = config('SLACK_OAUTH_REDIRECT_URI', default='http://localhost:8000/api/v1/slack/oauth/callback/')
 
+ZOOM_CLIENT_ID          = config('ZOOM_CLIENT_ID',          default='')
+ZOOM_CLIENT_SECRET      = config('ZOOM_CLIENT_SECRET',      default='')
+ZOOM_WEBHOOK_SECRET     = config('ZOOM_WEBHOOK_SECRET',     default='')
+ZOOM_OAUTH_REDIRECT_URI = config('ZOOM_OAUTH_REDIRECT_URI', default='https://api.verato.twocents.ai/api/v1/zoom/oauth/callback/')
+
 GOOGLE_CLIENT_ID             = config('GOOGLE_CLIENT_ID',             default='')
 GOOGLE_CLIENT_SECRET         = config('GOOGLE_CLIENT_SECRET',         default='')
 GOOGLE_GMAIL_REDIRECT_URI    = config('GOOGLE_GMAIL_REDIRECT_URI',    default='http://localhost:8000/api/v1/gmail/oauth/callback/')

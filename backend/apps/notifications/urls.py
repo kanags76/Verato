@@ -22,6 +22,11 @@ from .views import (
     calendar_oauth_start,
     calendar_oauth_callback,
     calendar_disconnect,
+    zoom_status,
+    zoom_oauth_start,
+    zoom_oauth_callback,
+    zoom_disconnect,
+    zoom_webhook,
 )
 
 urlpatterns = [
@@ -47,4 +52,9 @@ urlpatterns = [
     path('calendar/oauth/start/',             calendar_oauth_start,       name='calendar-oauth-start'),
     path('calendar/oauth/callback/',          calendar_oauth_callback,    name='calendar-oauth-callback'),
     path('calendar/disconnect/',              calendar_disconnect,        name='calendar-disconnect'),
+    path('zoom/status/',                      zoom_status,                name='zoom-status'),
+    path('zoom/oauth/start/',                 zoom_oauth_start,           name='zoom-oauth-start'),
+    path('zoom/oauth/callback/',              zoom_oauth_callback,        name='zoom-oauth-callback'),
+    path('zoom/disconnect/',                  zoom_disconnect,            name='zoom-disconnect'),
+    path('zoom/webhook/',                     zoom_webhook,               name='zoom-webhook'),
 ]

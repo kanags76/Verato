@@ -346,6 +346,83 @@ def poll_gmail_replies():
     return {'commitments_updated': total_updated}
 
 
+# ── Zoom ──────────────────────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=2)
+def fetch_zoom_transcript(self, zoom_recording_id: str):
+    """
+    Download a Zoom VTT transcript, create a Meeting, and queue process_meeting.
+    Retries twice (5 min apart) on transient failures.
+    """
+    import requests as http_requests
+    from .models import ZoomRecording
+    from apps.meetings.models import Meeting
+
+    try:
+        recording = ZoomRecording.objects.select_related('organisation').get(id=zoom_recording_id)
+    except ZoomRecording.DoesNotExist:
+        logger.error("fetch_zoom_transcript: recording %s not found", zoom_recording_id)
+        return
+
+    if recording.status in {ZoomRecording.Status.DONE, ZoomRecording.Status.PROCESSING}:
+        return
+
+    recording.status = ZoomRecording.Status.FETCHING
+    recording.save(update_fields=['status', 'updated_at'])
+
+    try:
+        # Download the VTT transcript using the temporary download token
+        download_url = recording.download_url
+        if recording.download_token:
+            download_url = f"{download_url}?access_token={recording.download_token}"
+
+        resp = http_requests.get(download_url, timeout=30, allow_redirects=True)
+        resp.raise_for_status()
+        transcript_text = resp.text
+
+        if not transcript_text.strip():
+            recording.status = ZoomRecording.Status.NO_TRANSCRIPT
+            recording.error  = 'Transcript file was empty'
+            recording.save(update_fields=['status', 'error', 'updated_at'])
+            return
+
+        recording.status = ZoomRecording.Status.PROCESSING
+        recording.save(update_fields=['status', 'updated_at'])
+
+        org     = recording.organisation
+        meeting = Meeting.objects.create(
+            organisation=org,
+            title=recording.title,
+            platform=Meeting.Platform.ZOOM,
+            occurred_at=recording.started_at,
+            raw_transcript=transcript_text,
+            word_count=len(transcript_text.split()),
+            external_id=recording.zoom_meeting_id,
+        )
+
+        recording.meeting = meeting
+        recording.status  = ZoomRecording.Status.DONE
+        recording.save(update_fields=['meeting', 'status', 'updated_at'])
+
+        from apps.meetings.tasks import process_meeting
+        process_meeting.delay(str(meeting.id))
+
+        logger.info(
+            "fetch_zoom_transcript: created meeting %s from '%s' for org %s",
+            meeting.id, recording.title, org.slug,
+        )
+
+    except Exception as exc:
+        logger.error("fetch_zoom_transcript failed for recording %s: %s", zoom_recording_id, exc)
+        try:
+            recording.status = ZoomRecording.Status.FAILED
+            recording.error  = str(exc)[:500]
+            recording.save(update_fields=['status', 'error', 'updated_at'])
+        except Exception:
+            pass
+        raise self.retry(exc=exc, countdown=300)
+
+
 # ── Google Calendar / Meet ─────────────────────────────────────────────────────
 
 def _build_calendar_credentials(conn):
