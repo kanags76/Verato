@@ -1,0 +1,30 @@
+From: Sarah Kim <sarah@verato.app>
+To: Leadership Team
+Subject: Follow-ups from Monday's leadership sync — please action
+
+Hi all,
+
+Quick summary of what we committed to in Monday's session. Please confirm
+if anything looks wrong.
+
+Tom — you said you'd have the Accenture SOW signed and returned by end of
+this week (Friday May 29). Legal has already approved our side.
+
+James — you're on the hook for the three Indonesian enterprise demos before
+June 10. Grab, Gojek, and Tokopedia. Please book those this week.
+
+Maya — the staging environment migration needs to be done before June 1 so
+we can start UAT. You mentioned you'd coordinate with DevOps by Wednesday.
+
+I'll take the investor update deck and have a first draft ready by May 30
+for everyone to review.
+
+Also flagged but no owner yet:
+- The Singapore office lease renewal (someone in ops needs to pick this up,
+  deadline is end of June)
+- Customer support SLA review (Maya mentioned she might be able to do this
+  alongside the Q2 metrics — no hard deadline)
+
+Let me know if you have questions.
+
+Sarah

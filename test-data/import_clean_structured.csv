@@ -1,0 +1,11 @@
+Owner,Task,Due Date,Priority,Status,Notes
+Sarah Kim,Send Q2 board deck to all board members,2026-06-05,High,Open,Needs sign-off from CFO first
+Tom Reeves,Complete legal review of vendor contract with Accenture,2026-05-30,High,Open,Contact legal@accenture.com
+Maya Lim,Hire two senior engineers for the platform team,2026-06-30,High,Open,JDs already approved
+Tom Reeves,Submit AWS cost optimisation report to leadership,2026-05-28,Medium,Open,
+Sarah Kim,Set up weekly check-ins with EMEA sales leads,2026-06-01,Medium,Open,
+James Okafor,Prepare competitive analysis for Singapore market entry,2026-06-15,High,Open,Include pricing benchmarks
+Maya Lim,Migrate production database to RDS multi-AZ,2026-06-10,High,Open,Coordinate with DevOps
+James Okafor,Close three enterprise deals in pipeline,2026-06-30,High,Open,Salesforce pipeline ref: ENT-2024-Q2
+Sarah Kim,Present revised pricing strategy to CEO,2026-05-29,High,Open,
+Tom Reeves,Renew Microsoft Azure EA agreement,2026-06-20,Medium,Open,Current contract expires July 1
