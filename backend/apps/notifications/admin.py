@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.utils.html import format_html, mark_safe
 
-from .models import NudgeLog, NudgeDashboard, GmailPollLog
+from .models import NudgeLog, NudgeDashboard, GmailPollLog, InAppNotification
 
 
 # ── NudgeLog ──────────────────────────────────────────────────────────────────
@@ -163,3 +163,24 @@ class GmailPollLogAdmin(admin.ModelAdmin):
         if obj.error:
             return mark_safe('<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Error</span>')
         return mark_safe('<span style="background:#22c55e;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">OK</span>')
+
+
+# ── InAppNotification ─────────────────────────────────────────────────────────
+
+@admin.register(InAppNotification)
+class InAppNotificationAdmin(admin.ModelAdmin):
+    list_display    = ['created_at_display', 'organisation', 'notification_type', 'is_read', 'short_message', 'commitment']
+    list_filter     = ['organisation', 'notification_type', 'is_read']
+    readonly_fields = ['id', 'organisation', 'commitment', 'message', 'notification_type', 'is_read', 'created_at']
+    ordering        = ['-created_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Created', ordering='created_at')
+    def created_at_display(self, obj):
+        return obj.created_at.strftime('%-d %b %Y %H:%M')
+
+    @admin.display(description='Message')
+    def short_message(self, obj):
+        return obj.message[:80]
