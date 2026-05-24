@@ -37,7 +37,7 @@ Return a single JSON object with exactly these top-level keys:
 
 "meeting_type" — one of: leadership, one_on_one, team, project, board, external, other
 
-"meeting_summary" — 2-3 sentence plain English summary of the meeting's key discussion and decisions
+"meeting_summary" — 2-3 sentence plain English summary of the meeting\'s key discussion and decisions
 
 "meeting_title" — a concise 3-8 word title for this meeting inferred from the topics and participants,
   e.g. "Q2 Board Prep Review" or "EMEA Pricing Kickoff". Omit words like "meeting", "sync", "call".
@@ -107,14 +107,14 @@ The meeting coordinator has resolved the following ambiguities. Use these answer
 A commitment is when a specific person explicitly promises to deliver a specific thing by a specific time.
 
 INCLUDE — clear explicit commitments:
-  "I'll send you the report by Friday."
+  "I\'ll send you the report by Friday."
   "Tom will have the hiring brief to HR by May 2nd."
-  "We'll complete the legal review before end of month."
+  "We\'ll complete the legal review before end of month."
 
 EXCLUDE — everything that is not an explicit commitment:
   General discussion, brainstorming, or ideas
   Questions, requests, or suggestions ("we should...", "someone ought to...")
-  Conditional statements ("if we get sign-off, we'll...")
+  Conditional statements ("if we get sign-off, we\'ll...")
   Status updates about already-completed actions
   Vague intentions with no clear owner or deliverable
 
@@ -151,19 +151,19 @@ Transcript:
 {transcript}'''
 
 
-def seed_prompts(apps, schema_editor):
+def update_prompts(apps, schema_editor):
     Prompt = apps.get_model('prompts', 'Prompt')
-    Prompt.objects.get_or_create(name='transcript_extraction', defaults={'content': TRANSCRIPT_EXTRACTION})
-    Prompt.objects.get_or_create(name='import_extraction',     defaults={'content': IMPORT_EXTRACTION})
-    Prompt.objects.get_or_create(name='transcript_pass2',      defaults={'content': TRANSCRIPT_PASS2})
+    Prompt.objects.filter(name='transcript_extraction').update(content=TRANSCRIPT_EXTRACTION)
+    Prompt.objects.filter(name='import_extraction').update(content=IMPORT_EXTRACTION)
+    Prompt.objects.filter(name='transcript_pass2').update(content=TRANSCRIPT_PASS2)
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('prompts', '0001_initial'),
+        ('prompts', '0003_seed_gmail_reply_parse'),
     ]
 
     operations = [
-        migrations.RunPython(seed_prompts, migrations.RunPython.noop),
+        migrations.RunPython(update_prompts, migrations.RunPython.noop),
     ]
