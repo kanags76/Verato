@@ -117,9 +117,15 @@ def process_meeting(self, meeting_id: str):
         logger.error("process_meeting: meeting %s not found", meeting_id)
         return
 
+    # Guard: already processed — skip to avoid duplicate commitments on double-queue
+    if meeting.processing_status == Meeting.ProcessingStatus.COMPLETE:
+        logger.info("process_meeting: %s already COMPLETE, skipping", meeting_id)
+        return
+
     meeting.processing_status = Meeting.ProcessingStatus.PROCESSING
     meeting.save(update_fields=['processing_status'])
 
+    notification_args = None  # set inside try, fired outside to avoid retry-on-notify bug
     try:
         participants = list(meeting.participants.values_list('name', flat=True))
         result = extract_commitments(
@@ -165,8 +171,7 @@ def process_meeting(self, meeting_id: str):
                 "process_meeting (pass1, no clarifications): %s → %d commitments, %d topics, type=%s",
                 meeting_id, created, len(result["topics"]), result["meeting_type"],
             )
-            from apps.notifications.views import create_cos_notification
-            create_cos_notification(
+            notification_args = (
                 org, None,
                 f'{created} commitment{"s" if created != 1 else ""} extracted from "{meeting.title}" — ready to review.',
                 'meeting_ready',
@@ -180,12 +185,18 @@ def process_meeting(self, meeting_id: str):
         try:
             raise self.retry(exc=exc, countdown=30)
         except MaxRetriesExceededError:
-            from apps.notifications.views import create_cos_notification
-            create_cos_notification(
+            notification_args = (
                 meeting.organisation, None,
                 f'Processing failed for "{meeting.title}". Check the meeting in the app for details.',
                 'meeting_failed',
             )
+
+    if notification_args:
+        try:
+            from apps.notifications.views import create_cos_notification
+            create_cos_notification(*notification_args)
+        except Exception as exc:
+            logger.warning("process_meeting: notification failed for %s: %s", meeting_id, exc)
 
 
 @shared_task(bind=True, max_retries=2)
@@ -200,9 +211,15 @@ def process_meeting_pass2(self, meeting_id: str):
         logger.error("process_meeting_pass2: meeting %s not found", meeting_id)
         return
 
+    # Guard: already processed — skip to avoid duplicate commitments on double-queue
+    if meeting.processing_status == Meeting.ProcessingStatus.COMPLETE:
+        logger.info("process_meeting_pass2: %s already COMPLETE, skipping", meeting_id)
+        return
+
     meeting.processing_status = Meeting.ProcessingStatus.PROCESSING
     meeting.save(update_fields=['processing_status'])
 
+    notification_args = None
     try:
         clarifications = list(
             meeting.clarifications.values('question', 'answer').order_by('order')
@@ -237,8 +254,7 @@ def process_meeting_pass2(self, meeting_id: str):
             "process_meeting_pass2: %s → %d commitments, %d topics, type=%s",
             meeting_id, created, len(result["topics"]), result["meeting_type"],
         )
-        from apps.notifications.views import create_cos_notification
-        create_cos_notification(
+        notification_args = (
             org, None,
             f'{created} commitment{"s" if created != 1 else ""} extracted from "{meeting.title}" — ready to review.',
             'meeting_ready',
@@ -252,12 +268,18 @@ def process_meeting_pass2(self, meeting_id: str):
         try:
             raise self.retry(exc=exc, countdown=30)
         except MaxRetriesExceededError:
-            from apps.notifications.views import create_cos_notification
-            create_cos_notification(
+            notification_args = (
                 meeting.organisation, None,
                 f'Processing failed for "{meeting.title}". Check the meeting in the app for details.',
                 'meeting_failed',
             )
+
+    if notification_args:
+        try:
+            from apps.notifications.views import create_cos_notification
+            create_cos_notification(*notification_args)
+        except Exception as exc:
+            logger.warning("process_meeting_pass2: notification failed for %s: %s", meeting_id, exc)
 
 
 @shared_task(bind=True, max_retries=2)
