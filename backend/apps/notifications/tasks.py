@@ -327,6 +327,11 @@ def poll_gmail_replies():
                     'gmail_reply',
                 )
 
+                # Mark this message as processed so it is not re-handled on the next poll
+                if reply.get('message_id'):
+                    nl.last_reply_message_id = reply['message_id']
+                    nl.save(update_fields=['last_reply_message_id'])
+
                 poll_log.replies_found      += 1
                 poll_log.commitments_updated += 1
                 total_updated               += 1

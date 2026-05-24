@@ -141,13 +141,16 @@ def poll_reply_threads(org) -> list[dict]:
             if not reply_messages:
                 continue
 
-            latest = reply_messages[-1]
+            latest     = reply_messages[-1]
+            message_id = latest.get('id')
+            if message_id and message_id == nl.last_reply_message_id:
+                continue  # already processed this reply
             reply_body = _extract_body(latest)
             if reply_body:
                 replies.append({
                     'nudge_log':  nl,
                     'reply_body': reply_body,
-                    'message_id': latest.get('id'),
+                    'message_id': message_id,
                 })
         except Exception as exc:
             logger.warning("Gmail thread fetch failed %s: %s", nl.gmail_thread_id, exc)

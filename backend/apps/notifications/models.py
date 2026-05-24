@@ -27,7 +27,8 @@ class NudgeLog(models.Model):
     nudged_at  = models.DateTimeField(auto_now_add=True)
     channel    = models.CharField(max_length=64, blank=True)
 
-    gmail_thread_id = models.CharField(max_length=32, blank=True)
+    gmail_thread_id           = models.CharField(max_length=32, blank=True)
+    last_reply_message_id     = models.CharField(max_length=32, blank=True)
 
     class Meta:
         db_table        = 'notifications_nudgelog'
