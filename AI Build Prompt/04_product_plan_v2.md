@@ -20,61 +20,35 @@ V1 proved the core loop: upload transcript → AI extracts commitments → CoS c
 
 ---
 
-## Feature 1 — Passive Meeting Ingestion
+## Feature 1 — Passive Meeting Ingestion ✅ COMPLETE
 
-### The Problem
-V1 requires the CoS to manually download and upload transcripts (.txt, .docx, .csv). A CoS attends 15–20 meetings per week — manual drag-and-drop is not a sustainable workflow.
+### Status: Both Path A (Google Meet) and Path B (Zoom) are built and live in production.
 
-### Target Experience
-The CoS does nothing. The moment a meeting ends, Verato has the transcript and begins extraction. Zero clicks.
+### What was built
 
-### Build Options (pick one primary path)
+**Path A — Google Calendar + Google Meet (W14)**
+- `CalendarConnection` model: per-org Google OAuth tokens (`calendar.readonly` + `drive.readonly` scopes)
+- `CalendarEvent` model: one row per Google Meet event, status machine (`pending → fetching → processing → done | no_transcript | failed`), FK to Meeting once processed
+- `sync_calendar_events` Celery task (every 15 min): pulls Calendar API events with Meet conferenceData, `get_or_create` on `(org, google_event_id)`
+- `fetch_google_meet_transcript` Celery task: searches Drive for VTT transcript, downloads, creates Meeting, queues `process_meeting`
+- OAuth: `OAUTHLIB_RELAX_TOKEN_SCOPE=1` fix applied; token refresh handled in `_build_calendar_credentials` helper
+- Settings endpoints: `GET /calendar/status/` · `GET /calendar/oauth/start/?auth=<jwt>` · `POST /calendar/disconnect/`
 
-**Path A — Google Calendar + Google Meet auto-pull (recommended first)**
-- Connect the CoS's Google account (already partially wired for Gmail OAuth)
-- On connect: read Google Calendar events for the org
-- After each meeting that has a Google Meet link: poll Google Drive for the auto-generated transcript (Meet creates a `.vtt` file in Drive ~2 min after the call ends)
-- Pull the file, create a Meeting record, kick off `process_meeting` Celery task
-- No bot, no Zoom SDK — works with the existing Google OAuth scope
+**Path B — Zoom Webhook (W15)**
+- `ZoomConnection` model: per-org Zoom OAuth tokens
+- `ZoomRecording` model: one row per `recording.completed` webhook event, same status machine, FK to Meeting
+- `POST /zoom/webhook/`: HMAC-SHA256 verified, handles `endpoint.url_validation` handshake + `recording.completed`
+- `fetch_zoom_transcript` Celery task: downloads VTT using `download_url?access_token={download_token}`, creates Meeting, queues `process_meeting`
+- Settings endpoints: `GET /zoom/status/` · `GET /zoom/oauth/start/?auth=<jwt>` · `POST /zoom/disconnect/`
 
-**Path B — Zoom Webhook + Transcript API**
-- Register a Zoom OAuth app, webhook on `recording.completed` event
-- Zoom sends a webhook → Django receives it → fetches transcript via Zoom API
-- Requires a Zoom Pro/Business account with cloud recording enabled
-- More reliable for Zoom-heavy orgs but needs a separate OAuth app
+**Gemini auto-title (W14.5):** Both paths leave meeting title blank; Gemini extraction prompt now returns `meeting_title` and `process_meeting` sets it automatically.
 
-**Path C — Calendar Bot (Recall.ai or similar)**
-- Use Recall.ai or a self-hosted bot to join meetings as a silent participant
-- Most powerful (works with Zoom, Meet, Teams, WebEx) but adds a third-party dependency and a monthly cost
-- Recommended only if Paths A + B don't cover the org's meeting mix
+**Path C — Calendar Bot (Recall.ai)** — still deferred. Use only if a design partner uses Teams or WebEx.
 
-### New Data Model Additions
-```
-CalendarConnection
-    organisation → Organisation
-    provider: google | zoom
-    access_token, refresh_token, token_expiry
-    calendar_email
-    last_synced_at
-
-CalendarEvent
-    organisation → Organisation
-    external_id (Google event ID / Zoom meeting ID)
-    title, starts_at, ends_at
-    transcript_url (Google Drive file ID or Zoom download URL)
-    status: pending | fetched | processing | done | failed
-    meeting → Meeting (FK, nullable — set once extraction completes)
-```
-
-### Backend Tasks
-- `sync_calendar_events` — Celery beat, every 5 min: pull new events from Google Calendar API, create CalendarEvent rows
-- `fetch_meeting_transcript` — fires ~3 min after event end_time: checks Drive for transcript, downloads, kicks off `process_meeting`
-- Webhook receiver for Zoom: `POST /api/v1/integrations/zoom/webhook/`
-
-### Settings Page Addition
-- "Connect Google Calendar" button (reuses Google OAuth, adds `calendar.readonly` and `drive.readonly` scopes)
-- List of upcoming meetings Verato will monitor
-- Toggle: auto-process transcripts vs. require manual confirmation before extraction runs
+### Settings Page (needs frontend work)
+- "Connect Google Calendar" card: status + OAuth popup + disconnect
+- "Connect Zoom" card: status + OAuth popup + disconnect
+- Both use popup OAuth pattern (`window.open('/api/v1/{service}/oauth/start/?auth={jwt}')`, poll for close, re-fetch status)
 
 ---
 
@@ -314,13 +288,13 @@ All new Gemini prompts stored in the `apps.prompts` DB table with keys:
 
 V2 features are independent enough to ship incrementally. Recommended order:
 
-| Sprint | Feature | Rationale |
-|---|---|---|
-| Sprint 1 | **Feature 5 — Nudge Intelligence** | Builds directly on existing reply parsing; no new integrations; immediate CoS value |
-| Sprint 2 | **Feature 3 — Friction Detection** | Adds one Gemini call to existing reply flow; new FrictionSignal model; small surface area |
-| Sprint 3 | **Feature 1 — Passive Ingestion (Google Meet path)** | Highest CoS impact; reuses Google OAuth already wired; removes biggest daily friction |
-| Sprint 4 | **Feature 4 — Org Health Heatmap** | Builds on existing Person model; no new integrations; analytical, not operational |
-| Sprint 5 | **Feature 2 — Executive Brief** | Most complex (new model, AI synthesis, UI redesign); deliver last so it sits on top of clean data |
+| Sprint | Feature | Status | Rationale |
+|---|---|---|---|
+| Sprint 1 | **Feature 1 — Passive Ingestion** | ✅ Complete | Google Meet (W14) + Zoom (W15) both live |
+| Sprint 2 | **Feature 5 — Nudge Intelligence** | Next | Builds directly on existing reply parsing; no new integrations; immediate CoS value |
+| Sprint 3 | **Feature 3 — Friction Detection** | Pending | Adds one Gemini call to existing reply flow; new FrictionSignal model; small surface area |
+| Sprint 4 | **Feature 4 — Org Health Heatmap** | Pending | Builds on existing Person model; no new integrations; analytical, not operational |
+| Sprint 5 | **Feature 2 — Executive Brief** | Pending | Most complex (new model, AI synthesis, UI redesign); deliver last so it sits on top of clean data |
 
 ---
 
@@ -338,10 +312,10 @@ V2 features are independent enough to ship incrementally. Recommended order:
 ## What V2 Does Not Include
 
 - **Native mobile app** — web-responsive is sufficient for V2; mobile app is V3
-- **Zoom path for passive ingestion** — Zoom webhook approach is a Sprint 3 extension, not the primary path
+- **Zoom path for passive ingestion** — ✅ Built in W15, not deferred
 - **Teams / WebEx integration** — deferred to V3 unless beta feedback shows these are the dominant meeting tools
 - **Full pgvector semantic search** — commitment debt and pattern detection uses snapshot tables in V2, not embeddings; embeddings are V3
 
 ---
 
-*Last updated: 2026-05-23*
+*Last updated: 2026-05-24*

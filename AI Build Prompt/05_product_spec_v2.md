@@ -1,5 +1,5 @@
 # Verato — Product Specification & Key Screens
-## Version 0.3 — MVP Complete / Phase 2 Planning
+## Version 0.4 — Passive Ingestion Live / Phase 2 Frontend Next
 
 > **ICP:** Chief of Staff, Programme Manager at scale-ups (50–300 people)
 > **Stack:** Django REST (AWS) · Next.js (GCP) · Gemini 2.5 Flash Lite · PostgreSQL 18
@@ -106,17 +106,18 @@ Any CoS can register their organisation, import their existing tracker, connect 
 
 ## 5. Feature Set — Phased
 
-### Phase 1 — The Core Loop (Complete — 310 tests passing)
+### Phase 1 — The Core Loop (Complete — 310+ tests passing)
 
 | Feature | Status |
 |---|---|
 | Self-serve sign-up (individual + team plans) | ✓ Built |
 | Team invite via email link (7-day token) | ✓ Built |
 | Per-org Slack OAuth (each org connects own workspace) | ✓ Built |
+| Slack user management — workspace search, import, full sync | ✓ Built |
 | Slack connection status + test-message endpoints | ✓ Built |
 | Org settings endpoint (confidence threshold, nudge timing, digest schedule) | ✓ Built |
-| Manual transcript upload | ✓ Built |
-| Prior commitments import | ✓ Built |
+| Manual transcript upload (title optional — Gemini auto-generates if blank) | ✓ Built |
+| Prior commitments import (title optional — Gemini auto-generates if blank) | ✓ Built |
 | Commitment extraction (explicit only) | ✓ Built |
 | Extraction review (confirm / reject / bulk-confirm) | ✓ Built |
 | Owner + deadline assignment | ✓ Built |
@@ -128,13 +129,17 @@ Any CoS can register their organisation, import their existing tracker, connect 
 | Slack nudge (Done / Delayed / Blocked) + manual nudge action | ✓ Built |
 | Weekly digest email (Gemini intro + SendGrid) | ✓ Built |
 | Knowledge graph foundation (topics, tags, person timeline) | ✓ Built |
+| Gmail OAuth — send nudge emails, poll reply threads, Gemini intent parsing | ✓ Built |
+| In-app notification feed (Slack replies, Gmail replies, meeting events) | ✓ Built |
+| **Google Calendar + Google Meet passive ingestion** | ✓ Built |
+| **Zoom passive ingestion via webhook + recording download** | ✓ Built |
 
 **What is explicitly not in Phase 1:**
 - Cross-meeting conflict detection (requires embeddings)
 - Implicit and conditional commitment extraction
 - Dependency chain tracking
 - Analytics dashboard
-- Teams / Google Meet connectors
+- Microsoft Teams integration
 - Pre-meeting briefings
 - Org-calibrated extraction recompilation
 
@@ -598,9 +603,10 @@ The aha moment is the first time an owner replies "Done" in Slack and the CoS se
 |---|---|---|
 | Slack (per-org OAuth) | Owner nudges, Done/Delayed/Blocked, CoS alerts | 1 ✓ Built |
 | SendGrid (via django-anymail) | Weekly digest email, invite emails | 1 ✓ Built |
-| Zoom (webhook) | Auto-ingest transcript when meeting ends | 1 (stretch) |
+| Gmail OAuth | Send nudge emails, poll reply threads, Gemini intent parsing | 1 ✓ Built |
+| Google Calendar + Google Drive | Auto-pull Meet transcripts via Drive VTT; sync every 15 min | 1 ✓ Built |
+| Zoom (webhook + OAuth) | Auto-ingest recording when meeting ends; HMAC-verified webhook | 1 ✓ Built |
 | Microsoft Teams | Auto-ingest Teams transcripts | 2 |
-| Google Meet | Auto-ingest Meet transcripts | 2 |
 | Jira / Linear | Push commitments as issues; sync status back | 3 |
 | Workday / BambooHR | Sync person/role data | 3 |
 
@@ -630,4 +636,4 @@ The aha moment is the first time an owner replies "Done" in Slack and the CoS se
 
 ---
 
-*End of document. Version 0.3 — Phase 1 backend complete, 264 tests passing. Frontend to be generated with Google AI Studio (Phase 3).*
+*Last updated: 2026-05-24 — Version 0.4. Passive ingestion (Google Meet + Zoom) live. Frontend settings UI for Calendar and Zoom is next.*

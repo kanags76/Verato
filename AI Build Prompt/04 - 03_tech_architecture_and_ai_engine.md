@@ -1,52 +1,52 @@
-# Commitment OS — Technical Architecture & AI Engine
+# Verato — Technical Architecture & AI Engine
 
-> **Backend:** Django 5.x + DRF — deployed on AWS (ECS Fargate + RDS + ElastiCache)  
-> **Frontend:** Next.js 14 (React) — deployed on GCP (Cloud Run)  
-> **LLM:** Gemini 1.5 Pro / Flash (Google AI Studio → Vertex AI in Phase 2)  
-> **Embeddings:** Gemini text-embedding-004 (768 dimensions, via pgvector)  
+> **Backend:** Django 6.x + DRF — deployed on AWS EC2 t3.small via Docker Compose  
+> **Frontend:** React 19 + Vite + TypeScript — deployed on GCP Cloud Run (Google AI Studio build)  
+> **LLM:** Gemini 2.5 Flash Lite (Google AI Studio API key)  
+> **Embeddings:** Gemini text-embedding-004 — Phase 2 only (pgvector not yet installed)  
 > **Communication:** HTTPS only · JWT Bearer auth · JSON responses  
 > **Principle:** Zero hard coupling — frontend and backend are independently deployable
+> **Last updated:** 2026-05-24
 
 ---
 
-## 1. System Architecture Overview
+## 1. System Architecture Overview (Current — Production)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  GOOGLE CLOUD — Frontend Zone                                    │
 │                                                                  │
-│  ┌─────────────────┐    ┌──────────────┐    ┌────────────────┐  │
-│  │  Next.js App    │    │  Cloud CDN   │    │  Gemini API    │  │
-│  │  Cloud Run      │    │  Static assets    │  AI Studio /   │  │
-│  │  SSR + API BFF  │    │              │    │  Vertex AI     │  │
-│  └────────┬────────┘    └──────────────┘    └────────────────┘  │
-│           │                                        ↑            │
-└───────────┼────────────────────────────────────────┼────────────┘
-            │ HTTPS · JWT Bearer · JSON               │ Called from
-            │                                         │ AWS workers only
-┌───────────┼─────────────────────────────────────────┼────────────┐
-│  AWS — Backend Zone                                 │            │
-│           │                                         │            │
-│  ┌────────▼────────┐    ┌──────────────┐            │            │
-│  │  AWS ALB        │    │  API Gateway │            │            │
-│  │  Load Balancer  │    │  (optional)  │            │            │
-│  └────────┬────────┘    └──────────────┘            │            │
-│           │                                         │            │
-│  ┌────────▼────────┐    ┌──────────────┐    ┌──────┴─────────┐  │
-│  │  Django REST    │    │  Celery      │    │  Celery        │  │
-│  │  ECS Fargate    │    │  Workers     │    │  AI Pipeline   │  │
-│  │  (API only)     │    │  ECS Fargate │    │  ECS Fargate   │  │
-│  └────────┬────────┘    └──────┬───────┘    └────────────────┘  │
-│           │                   │                                  │
-│  ┌────────▼────────────────────▼──────────────────────────────┐  │
-│  │                    AWS Services                             │  │
-│  │  RDS PostgreSQL 16  │  ElastiCache Redis  │  S3 Transcripts│  │
-│  │  (+ pgvector ext)   │  (Celery broker)    │  (file store)  │  │
-│  │                     │                     │                │  │
-│  │  Secrets Manager    │  ECR                │  CloudWatch    │  │
-│  │  (all credentials)  │  (Docker images)    │  (logs)        │  │
-│  └────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────┐  ┌────────────────────┐   │
+│  │  React 19 / Vite / TypeScript    │  │  Gemini API        │   │
+│  │  Cloud Run (Google AI Studio)    │  │  AI Studio key     │   │
+│  │  verato.twocents.ai              │  │  (gemini-2.5-flash)│   │
+│  └────────────────┬─────────────────┘  └────────┬───────────┘   │
+│                   │                             ↑               │
+└───────────────────┼─────────────────────────────┼───────────────┘
+                    │ HTTPS · JWT Bearer · JSON    │ Called from
+                    │                              │ EC2 worker only
+┌───────────────────┼──────────────────────────────┼───────────────┐
+│  AWS EC2 t3.small — us-east-1 (98.87.229.254)    │               │
+│  nginx → gunicorn (Docker Compose)               │               │
+│                   │                              │               │
+│  ┌────────────────▼───────────┐  ┌───────────────┴───────────┐  │
+│  │  Django 6 / DRF            │  │  Celery workers           │  │
+│  │  Gunicorn (3 workers)       │  │  Celery Beat scheduler    │  │
+│  │  api.verato.twocents.ai     │  │  (same Docker image)      │  │
+│  └────────────────┬───────────┘  └───────────────────────────┘  │
+│                   │                                              │
+│  ┌────────────────▼────────────────────────────────────────────┐ │
+│  │  Docker Compose services                                    │ │
+│  │  PostgreSQL 16  │  Redis 7  │  nginx + Let's Encrypt SSL   │ │
+│  └─────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────┘
+
+External integrations (all per-org, stored in DB):
+  Slack OAuth   → org.settings['slack_token']
+  Gmail OAuth   → org.settings['gmail_*']
+  Google Calendar → CalendarConnection model
+  Zoom OAuth    → ZoomConnection model
+  Zoom webhooks → POST /api/v1/zoom/webhook/
 ```
 
 ---

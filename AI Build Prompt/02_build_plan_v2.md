@@ -264,6 +264,10 @@ app.conf.beat_schedule = {
         'task':     'apps.notifications.tasks.poll_gmail_replies',
         'schedule': crontab(minute='*/15'),  # every 15 min — per-org interval enforced in task
     },
+    'sync-calendar-events': {
+        'task':     'apps.notifications.tasks.sync_calendar_events',
+        'schedule': crontab(minute='*/15'),  # every 15 min — syncs Google Meet events for all connected orgs
+    },
 }
 ```
 
@@ -472,13 +476,78 @@ Endpoints: `confirm`, `reject`, `escalate`, `resolve` actions on commitments. `G
 
 ---
 
-### ✅ Phase 1 Backend Complete — All User Stories Covered
+### Week 11 — Slack User Management ✓ DONE
 
-**All APIs for all 7 user story epics are now built.** The frontend can be built against Swagger UI at `localhost:8000/api/schema/ui/` without any further backend changes needed.
+Search Slack workspace by email/name, import selected users as Persons, full workspace sync with email-match auto-linking and confirm flow.
+
+| Endpoint | Description |
+|---|---|
+| `GET /slack/users/?q=` | Search by email or name |
+| `POST /slack/users/import/` | Import selected users; link or create Person |
+| `GET /slack/users/sync/` | Full workspace sync — matched/unmatched lists |
+| `POST /slack/users/sync/` | Confirm matches `{confirmations: [{person_id, slack_user_id}]}` |
 
 ---
 
-### Phase 2 — Frontend (Next.js) ← NEXT
+### Week 14 — Google Calendar + Google Meet Passive Ingestion ✓ DONE
+
+**Goal:** Eliminate manual transcript upload for Google Meet meetings.
+
+**Data model:** `CalendarConnection` (per-org OAuth) + `CalendarEvent` (per Meet event with status machine).
+
+**Celery tasks:**
+- `sync_calendar_events` — every 15 min: pulls Google Calendar API events with Meet links, `get_or_create` on `(org, google_event_id)`, schedules `fetch_google_meet_transcript` only for newly created events
+- `fetch_google_meet_transcript(calendar_event_id)` — downloads transcript from Google Drive, creates Meeting, queues `process_meeting`
+
+**Token refresh:** `_build_calendar_credentials(conn)` helper checks expiry, refreshes via `google.oauth2.credentials.Credentials`, saves updated token back to CalendarConnection.
+
+**OAuth fix:** `OAUTHLIB_RELAX_TOKEN_SCOPE=1` set before `flow.fetch_token()` — required because Google appends `openid` to returned scopes.
+
+**New endpoints:** `GET /calendar/status/` · `GET /calendar/oauth/start/` · `GET /calendar/oauth/callback/` · `POST /calendar/disconnect/`
+
+**Admin:** `CalendarConnectionAdmin` (transcripts_detected badge), `CalendarEventAdmin` (colour-coded status, Drive file link, Meeting link).
+
+**Notifications:** On processing complete, creates InAppNotification with type `meeting_ready` or `meeting_failed`.
+
+---
+
+### Week 14.5 — Gemini Auto-Title + Optional Meeting Title ✓ DONE
+
+- `title` is now optional on both upload and import endpoints (blank string, no fallback)
+- Gemini extraction prompt now returns `meeting_title` field — a concise 3–8 word summary of the meeting
+- `process_meeting` and `process_import` tasks: if `meeting.title` is blank and Gemini returned a title, sets it automatically
+- `parse_extraction_response` extracts `meeting_title` from Gemini JSON into `result["title"]`
+
+---
+
+### Week 15 — Zoom Passive Ingestion ✓ DONE
+
+**Goal:** Auto-process Zoom cloud recordings the moment they're ready.
+
+**Data model:** `ZoomConnection` (per-org OAuth) + `ZoomRecording` (per recording webhook event).
+
+**Flow:**
+1. Org connects Zoom via OAuth (`zoom_oauth_start` → user authorises → `zoom_oauth_callback` saves tokens)
+2. Zoom sends `recording.completed` webhook to `POST /zoom/webhook/`
+3. Webhook: HMAC-SHA256 signature verified (`v0:{timestamp}:{body}` with ZOOM_WEBHOOK_SECRET), finds org by `zoom_account_id`, creates `ZoomRecording`, queues `fetch_zoom_transcript`
+4. `fetch_zoom_transcript`: downloads VTT from Zoom using `download_url?access_token={download_token}`, creates Meeting, queues `process_meeting`
+5. `process_meeting` fires → Gemini extraction → InAppNotification created
+
+**Zoom app type:** General App (user-managed OAuth). Required scope: `recording:read`. Webhook event: `recording.completed`.
+
+**New endpoints:** `GET /zoom/status/` · `GET /zoom/oauth/start/` · `GET /zoom/oauth/callback/` · `POST /zoom/disconnect/` · `POST /zoom/webhook/`
+
+**Admin:** `ZoomConnectionAdmin`, `ZoomRecordingAdmin` (colour-coded status, Meeting link).
+
+---
+
+### ✅ Phase 2.8 — Passive Ingestion Complete
+
+Both Google Meet (via Calendar + Drive) and Zoom (via webhook + recording download) are live. Zero-click transcript processing is now operational.
+
+---
+
+### Phase 3 — Frontend Integrations UI ← NEXT
 
 Full plan: **`06_phase2_frontend_build_plan.md`**
 

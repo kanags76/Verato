@@ -362,6 +362,7 @@ ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker comp
 | `send_deadline_nudges` | Daily 09:00 UTC |
 | `send_weekly_digest` | Monday 07:00 UTC |
 | `poll_gmail_replies` | Every 30 minutes |
+| `sync_calendar_events` | Every 15 minutes |
 
 ---
 
@@ -382,8 +383,19 @@ ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker comp
 | `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials |
 | `GOOGLE_CLIENT_SECRET` | Same as above |
 | `GOOGLE_GMAIL_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/gmail/oauth/callback/` |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/calendar/oauth/callback/` |
 
-Gmail API must be enabled in Google Cloud Console. Each org connects via the OAuth flow — tokens stored in `org.settings` (not env vars).
+Gmail + Calendar APIs must be enabled in Google Cloud Console. Each org connects via OAuth — tokens stored in `org.settings` (Gmail) or `CalendarConnection` model (Calendar).
+
+#### Zoom (per-org OAuth + webhook)
+| Variable | Notes |
+|----------|-------|
+| `ZOOM_CLIENT_ID` | Zoom Marketplace → General App → App Credentials |
+| `ZOOM_CLIENT_SECRET` | Same as above |
+| `ZOOM_WEBHOOK_SECRET` | Zoom Marketplace → Feature → Event Subscriptions → Secret Token |
+| `ZOOM_OAUTH_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/zoom/oauth/callback/` |
+
+Zoom app must be a **General App** (user-managed OAuth). Required scopes: `recording:read`. Required webhook event: `recording.completed`. Tokens stored in `ZoomConnection` model.
 
 ---
 
@@ -397,6 +409,11 @@ Gmail API must be enabled in Google Cloud Console. Each org connects via the OAu
 | `/api/v1/gmail/oauth/start/?auth=<jwt>` | Start Gmail OAuth flow |
 | `/api/v1/slack/status/` | Slack connection status |
 | `/api/v1/slack/oauth/start/?auth=<jwt>` | Start Slack OAuth flow |
+| `/api/v1/calendar/status/` | Google Calendar connection status |
+| `/api/v1/calendar/oauth/start/?auth=<jwt>` | Start Calendar OAuth flow |
+| `/api/v1/zoom/status/` | Zoom connection status |
+| `/api/v1/zoom/oauth/start/?auth=<jwt>` | Start Zoom OAuth flow |
+| `/api/v1/zoom/webhook/` | Zoom recording webhook (called by Zoom, not frontend) |
 
 ---
 

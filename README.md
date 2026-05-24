@@ -2,7 +2,7 @@
 
 Accountability layer for organisations. Extracts every commitment made in meetings, assigns it an owner, scores risk, and nudges before it slips.
 
-**Stack:** Django REST API · React/Vite · PostgreSQL · Redis · Celery · Gemini AI · Slack · Gmail OAuth
+**Stack:** Django REST API · React/Vite · PostgreSQL · Redis · Celery · Gemini AI · Slack · Gmail OAuth · Google Calendar · Google Meet · Zoom
 **Repo:** https://github.com/kanags76/Verato (private)
 **Production:** https://api.verato.twocents.ai (backend) · https://verato.twocents.ai (frontend)
 
@@ -17,7 +17,7 @@ Verato/
 │   │   ├── accounts/          Organisation, User (is_org_admin), Person, Invitation
 │   │   ├── meetings/          Meeting, MeetingParticipant, MeetingTopic
 │   │   ├── commitments/       Commitment, CommitmentTag, EscalationEvent, CommitmentEvent, risk.py
-│   │   ├── notifications/     Slack nudges, Gmail OAuth, NudgeLog, GmailPollLog, InAppNotification, weekly digest
+│   │   ├── notifications/     Slack nudges, Gmail OAuth, Google Calendar, Zoom, NudgeLog, GmailPollLog, CalendarConnection, CalendarEvent, ZoomConnection, ZoomRecording, InAppNotification, weekly digest
 │   │   ├── prompts/           Editable Gemini prompts stored in DB (transcript, import, gmail_reply_parse)
 │   │   └── analytics/         Dashboard summary (overdue / at-risk / on-track counts)
 │   ├── extraction/            AI extraction engine (pure Python, no Django dependency)
@@ -202,6 +202,17 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/notifications/unread-count/` | GET | `{unread: N}` — for badge |
 | `/api/v1/notifications/<id>/read/` | POST | Mark one notification as read |
 | `/api/v1/notifications/mark-all-read/` | POST | Clear all unread badges |
+| **Google Calendar** | | |
+| `/api/v1/calendar/status/` | GET | `{connected, email, transcripts_detected}` |
+| `/api/v1/calendar/oauth/start/` | GET | Redirect to Google Calendar OAuth consent (`?auth=<jwt>`) |
+| `/api/v1/calendar/oauth/callback/` | GET | Calendar OAuth callback — stores per-org access + refresh tokens |
+| `/api/v1/calendar/disconnect/` | POST | Remove org Calendar connection |
+| **Zoom** | | |
+| `/api/v1/zoom/status/` | GET | `{connected, email, account_id}` |
+| `/api/v1/zoom/oauth/start/` | GET | Redirect to Zoom OAuth consent (`?auth=<jwt>`) |
+| `/api/v1/zoom/oauth/callback/` | GET | Zoom OAuth callback — stores per-org tokens |
+| `/api/v1/zoom/disconnect/` | POST | Remove org Zoom connection |
+| `/api/v1/zoom/webhook/` | POST | Zoom webhook receiver — HMAC verified; handles `recording.completed` |
 
 ---
 
@@ -257,7 +268,11 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W13 | React/Vite frontend committed (Google AI Studio build) | ✓ Done |
 | W13.5 | In-app notification feed (Slack + Gmail reply triggers) | ✓ Done |
 | W13.6 | Bug fixes — email uniqueness 400, Gmail poll deduplication, Gemini SDK migration | ✓ Done |
-| — | Frontend notification bell + settings UI | Next |
+| W14 | Google Calendar + Google Meet passive ingestion — CalendarConnection, CalendarEvent, sync + fetch tasks, admin | ✓ Done |
+| W14.5 | Gemini auto-title, optional meeting title on upload + import, OAUTHLIB_RELAX_TOKEN_SCOPE fix | ✓ Done |
+| W15 | Zoom OAuth + webhook + recording transcript pipeline — ZoomConnection, ZoomRecording, fetch task, admin | ✓ Done |
+| W15.5 | Slack user management — workspace search, import, full workspace sync | ✓ Done |
+| — | Frontend: Calendar + Zoom settings cards, notification bell | Next |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
@@ -265,7 +280,8 @@ PHASE 2 — Frontend scaffold           ✓ COMPLETE (React/Vite on Cloud Run)
 PHASE 2.5 — Production hardening      ✓ COMPLETE (live at api.verato.twocents.ai)
 PHASE 2.6 — Nudge engine + Gmail      ✓ COMPLETE
 PHASE 2.7 — In-app notifications      ✓ COMPLETE
-PHASE 3 — Frontend notifications UI   ← Next
+PHASE 2.8 — Passive ingestion         ✓ COMPLETE (Google Meet + Zoom auto-processing)
+PHASE 3 — Frontend integrations UI    ← Next
 ```
 
 ---
@@ -292,6 +308,11 @@ PHASE 3 — Frontend notifications UI   ← Next
 | `GOOGLE_CLIENT_ID` | Google Cloud OAuth 2.0 client |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth 2.0 client |
 | `GOOGLE_GMAIL_REDIRECT_URI` | `/api/v1/gmail/oauth/callback/` |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | `/api/v1/calendar/oauth/callback/` |
+| `ZOOM_CLIENT_ID` | Zoom Marketplace app |
+| `ZOOM_CLIENT_SECRET` | Zoom Marketplace app |
+| `ZOOM_WEBHOOK_SECRET` | Zoom Event Subscriptions secret token |
+| `ZOOM_OAUTH_REDIRECT_URI` | `/api/v1/zoom/oauth/callback/` |
 
 ### Frontend — `frontend/.env.local` (gitignored)
 

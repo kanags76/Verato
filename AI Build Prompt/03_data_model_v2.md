@@ -1,4 +1,4 @@
-# Verato — Data Model (Current — W13.6)
+# Verato — Data Model (Current — W15.5)
 
 > **Database:** PostgreSQL 18 (no extensions required for MVP)
 > **ORM:** Django 6.x
@@ -58,9 +58,23 @@ Organisation (plan: individual|team)
     ├── GmailPollLog (W12 — one row per poll run per org)
     │       └── organisation → Organisation
     │
-    └── InAppNotification (W13.5 — per-org alerts for CoS)
+    ├── InAppNotification (W13.5 — per-org alerts for CoS)
+    │       ├── organisation → Organisation
+    │       └── commitment → Commitment (nullable)
+    │
+    ├── CalendarConnection (W14 — per-org Google Calendar OAuth)
+    │       └── organisation → Organisation (OneToOne)
+    │
+    ├── CalendarEvent (W14 — one row per Google Meet event)
+    │       ├── organisation → Organisation
+    │       └── meeting → Meeting (nullable — set once processed)
+    │
+    ├── ZoomConnection (W15 — per-org Zoom OAuth)
+    │       └── organisation → Organisation (OneToOne)
+    │
+    └── ZoomRecording (W15 — one row per Zoom cloud recording)
             ├── organisation → Organisation
-            └── commitment → Commitment (nullable)
+            └── meeting → Meeting (nullable — set once processed)
 
 ── V2 additions (planned, not yet built) ─────────────────────────
     ├── Conflict (commitment_a, commitment_b, type, confidence)
@@ -494,26 +508,23 @@ class CommitmentEvent(models.Model):
 
 ### 3.4 notifications/models.py
 
-```python
-import uuid
-from django.db import models
-from apps.commitments.models import Commitment
+Key models (see full source at `backend/apps/notifications/models.py`):
 
+**NudgeLog** — one row per nudge type per commitment. `unique_together` prevents re-sending the same nudge type. Tracks `gmail_thread_id` / `last_reply_message_id` for reply polling. `nudge_type` choices: `first_reminder`, `second_reminder`, `overdue_1/2/3`, `escalation`.
 
-class NudgeLog(models.Model):
-    """
-    Records every Slack nudge sent. Queried before each send_deadline_nudges run
-    to enforce the 20-hour cooldown — prevents double-nudging within the same window.
-    """
-    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    commitment = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='nudges')
-    nudged_at  = models.DateTimeField(auto_now_add=True)
-    channel    = models.CharField(max_length=64, blank=True)  # Slack channel/DM id returned by API
+**NudgeDashboard** — proxy model for Django admin sidebar link only; no extra table.
 
-    class Meta:
-        db_table = 'notifications_nudgelog'
-        ordering = ['-nudged_at']
-```
+**GmailPollLog** — one row per Gmail poll run per org. Tracks threads_checked, replies_found, commitments_updated.
+
+**InAppNotification** — per-org in-app alert. Types: `slack_reply`, `gmail_reply`, `meeting_ready`, `meeting_failed`. Polled by frontend at `/api/v1/notifications/`.
+
+**CalendarConnection** (W14) — per-org Google Calendar + Drive OAuth. Stores access_token, refresh_token, token_expiry, calendar_email. `transcripts_detected` flag: None=unknown, True=Drive transcripts found, False=not found. OneToOne with Organisation.
+
+**CalendarEvent** (W14) — one row per Google Calendar event with a Google Meet link. Status machine: `pending → fetching → processing → done | no_transcript | failed`. Links to `Meeting` once processing completes. `unique_together` on `(organisation, google_event_id)`.
+
+**ZoomConnection** (W15) — per-org Zoom OAuth. Stores access_token, refresh_token, token_expiry, zoom_email, zoom_account_id. OneToOne with Organisation.
+
+**ZoomRecording** (W15) — one row per Zoom cloud recording received via webhook. Status machine identical to CalendarEvent. `unique_together` on `(organisation, zoom_meeting_uuid)`. `download_url` + `download_token` used by `fetch_zoom_transcript` to download the VTT file.
 
 ---
 
@@ -726,7 +737,13 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `commitments_escalationevent` | Immutable log; Method=AUTO for Celery escalations |
 | `commitments_extractionfeedback` | Every confirm/reject; Phase 2 calibration input |
 | `commitments_commitmentevent` | Append-only audit log; every action + field edit written here |
-| `notifications_nudgelog` | One record per nudge sent; enforces 20h cooldown |
+| `notifications_nudgelog` | One record per nudge sent per type; tracks Gmail thread IDs |
+| `notifications_gmailpolllog` | One row per Gmail poll run per org |
+| `notifications_inappnotification` | Per-org in-app alerts; types: slack_reply, gmail_reply, meeting_ready, meeting_failed |
+| `notifications_calendarconnection` | Per-org Google Calendar OAuth tokens (OneToOne) |
+| `notifications_calendarevent` | One row per Google Meet event; status machine; links to Meeting on completion |
+| `notifications_zoomconnection` | Per-org Zoom OAuth tokens (OneToOne) |
+| `notifications_zoomrecording` | One row per Zoom cloud recording; status machine; links to Meeting on completion |
 
 **Deferred to Phase 2:**
 
@@ -755,6 +772,14 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `commitments/0004_commitment_status_done` | Rename status `delivered` → `done`; RunPython data backfill |
 | `commitments/0005_commitmentevent` | CommitmentEvent audit log model |
 | `notifications/0001_initial` | NudgeLog |
+| `notifications/0002_nudgelog_person_type` | NudgeLog.person FK, nudge_type choices, gmail_thread_id, last_reply_message_id |
+| `notifications/0003_gmailpolllog` | GmailPollLog model |
+| `notifications/0004_inappnotification` | InAppNotification model |
+| `notifications/0005_calendarconnection_calendarevent` | CalendarConnection + CalendarEvent models |
+| `notifications/0006_nudgedashboard` | NudgeDashboard proxy model |
+| `notifications/0007_calendarevent_transcripts_detected` | CalendarConnection.transcripts_detected field |
+| `notifications/0008_inappnotification_meeting_types` | InAppNotification — adds meeting_ready + meeting_failed types |
+| `notifications/0009_add_zoom_models` | ZoomConnection + ZoomRecording models |
 
 ### No pgvector in MVP
 

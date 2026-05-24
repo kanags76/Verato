@@ -278,6 +278,31 @@ Acceptance criteria
 - Note: Gmail API must be enabled in Google Cloud Console for the OAuth project
 API needs: ✅ GET /api/v1/gmail/status/ · ✅ GET /api/v1/gmail/oauth/start/ · ✅ POST /api/v1/gmail/disconnect/ · ✅ PATCH /api/v1/nudge-settings/ (polling frequency)
 
+## US-6.5 — Connect Google Calendar for automatic Meet transcript pickup
+As an: Admin
+I want to: Connect my Google Calendar so Verato automatically processes Google Meet transcripts
+So that: I never have to manually upload a transcript from a Google Meet call
+Acceptance criteria
+- Settings → Integrations → Google Calendar card
+- If connected: green status, connected email shown, "Transcripts detected" badge (or "Not detected" if Google Meet transcription is not enabled in Workspace admin), Disconnect button
+- If not connected: "Connect Google Calendar" CTA opens OAuth popup
+- On connect: Verato requests `calendar.readonly` + `drive.readonly` scopes
+- After connecting, meetings with Google Meet links appear automatically in the Meetings list once their transcript is available (~2–5 min after call ends)
+- If transcripts are never found: user is shown a message explaining that Google Meet transcription must be enabled in Google Workspace admin
+API needs: ✅ GET /api/v1/calendar/status/ · ✅ GET /api/v1/calendar/oauth/start/?auth=<jwt> · ✅ POST /api/v1/calendar/disconnect/
+
+## US-6.6 — Connect Zoom for automatic recording transcript pickup
+As an: Admin
+I want to: Connect my Zoom account so Verato automatically processes Zoom cloud recording transcripts
+So that: I never have to manually upload a transcript from a Zoom call
+Acceptance criteria
+- Settings → Integrations → Zoom card
+- If connected: green status, connected Zoom email shown, Disconnect button
+- If not connected: "Connect Zoom" CTA opens OAuth popup
+- After connecting: whenever a Zoom cloud recording completes, Verato receives a webhook and processes the VTT transcript automatically (typically within 2 min of recording finishing)
+- Requirements note: Zoom Pro/Business with Cloud Recording enabled; recording must include transcript
+API needs: ✅ GET /api/v1/zoom/status/ · ✅ GET /api/v1/zoom/oauth/start/?auth=<jwt> · ✅ POST /api/v1/zoom/disconnect/ (webhook handled server-side)
+
 ## US-6.3 — Tune extraction confidence threshold
 As an: Admin
 I want to: Set the org-wide threshold below which the LLM's extractions need manual review
