@@ -25,4 +25,8 @@ app.conf.beat_schedule = {
         'task':     'apps.notifications.tasks.poll_gmail_replies',
         'schedule': crontab(minute='*/15'),  # every 15 min — per-org interval enforced in task
     },
+    'sync-calendar-events': {
+        'task':     'apps.notifications.tasks.sync_calendar_events',
+        'schedule': crontab(minute='*/15'),  # every 15 min — picks up new Meet events
+    },
 }

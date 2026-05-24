@@ -870,3 +870,178 @@ def notification_mark_all_read(request):
         return Response({'detail': 'No organisation.'}, status=400)
     InAppNotification.objects.filter(organisation=org, is_read=False).update(is_read=True)
     return Response({'detail': 'All marked as read.'})
+
+
+# ── Google Calendar OAuth ─────────────────────────────────────────────────────
+
+_CALENDAR_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+]
+
+
+@extend_schema(tags=['calendar'], summary='Google Calendar connection status')
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def calendar_status(request):
+    from .models import CalendarConnection
+    org = getattr(request.user, 'organisation', None)
+    try:
+        conn = CalendarConnection.objects.get(organisation=org)
+        return Response({
+            'connected':             True,
+            'email':                 conn.calendar_email,
+            'last_synced_at':        conn.last_synced_at.isoformat() if conn.last_synced_at else None,
+            'transcripts_detected':  conn.transcripts_detected,
+            'transcripts_supported': conn.transcripts_detected,  # None = unknown, True = yes, False = no
+        })
+    except CalendarConnection.DoesNotExist:
+        return Response({'connected': False, 'transcripts_supported': None})
+
+
+@extend_schema(tags=['calendar'], summary='Start Google Calendar OAuth flow')
+@require_GET
+def calendar_oauth_start(request):
+    from google_auth_oauthlib.flow import Flow
+    token = request.GET.get('auth', '')
+    if not token:
+        return HttpResponse('Missing auth token.', status=400)
+
+    state = signing.dumps({'jwt': token}, salt='calendar-oauth')
+    flow = Flow.from_client_config(
+        {
+            'web': {
+                'client_id':                   settings.GOOGLE_CLIENT_ID,
+                'client_secret':               settings.GOOGLE_CLIENT_SECRET,
+                'auth_uri':                    'https://accounts.google.com/o/oauth2/auth',
+                'token_uri':                   'https://oauth2.googleapis.com/token',
+                'redirect_uris':               [settings.GOOGLE_CALENDAR_REDIRECT_URI],
+            }
+        },
+        scopes=_CALENDAR_SCOPES,
+    )
+    flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+    auth_url, _ = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='false',
+        prompt='consent',
+        state=state,
+    )
+    return HttpResponseRedirect(auth_url)
+
+
+@extend_schema(tags=['calendar'], summary='Google Calendar OAuth callback')
+@require_GET
+@csrf_exempt
+def calendar_oauth_callback(request):
+    from google_auth_oauthlib.flow import Flow
+    from googleapiclient.discovery import build
+    from google.oauth2.credentials import Credentials
+    from .models import CalendarConnection
+
+    code  = request.GET.get('code', '')
+    state = request.GET.get('state', '')
+    if not code or not state:
+        return _close_window_response('Missing code or state.', error=True)
+
+    try:
+        data = signing.loads(state, salt='calendar-oauth', max_age=3600)
+        jwt_token = data['jwt']
+    except signing.BadSignature:
+        return _close_window_response('Invalid state parameter.', error=True)
+
+    # Resolve org from JWT
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+        token_obj = AccessToken(jwt_token)
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.get(id=token_obj['user_id'])
+        org  = user.organisation
+        if org is None:
+            return _close_window_response('User has no organisation.', error=True)
+    except Exception as exc:
+        logger.error("Calendar OAuth JWT resolve failed: %s", exc)
+        return _close_window_response('Authentication error. Please try again.', error=True)
+
+    # Exchange code for tokens
+    try:
+        flow = Flow.from_client_config(
+            {
+                'web': {
+                    'client_id':     settings.GOOGLE_CLIENT_ID,
+                    'client_secret': settings.GOOGLE_CLIENT_SECRET,
+                    'auth_uri':      'https://accounts.google.com/o/oauth2/auth',
+                    'token_uri':     'https://oauth2.googleapis.com/token',
+                    'redirect_uris': [settings.GOOGLE_CALENDAR_REDIRECT_URI],
+                }
+            },
+            scopes=_CALENDAR_SCOPES,
+            state=state,
+        )
+        flow.redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+    except Exception as exc:
+        logger.error("Calendar OAuth token exchange failed: %s", exc)
+        return _close_window_response('Failed to connect Google Calendar. Please try again.', error=True)
+
+    # Get calendar email
+    try:
+        service = build('oauth2', 'v2', credentials=creds, cache_discovery=False)
+        info    = service.userinfo().get().execute()
+        cal_email = info.get('email', '')
+    except Exception:
+        cal_email = ''
+
+    # Probe Drive to detect if workspace supports Meet transcripts
+    transcripts_detected = _probe_meet_transcripts(creds)
+
+    # Save / update connection
+    CalendarConnection.objects.update_or_create(
+        organisation=org,
+        defaults={
+            'access_token':        creds.token,
+            'refresh_token':       creds.refresh_token or '',
+            'token_expiry':        creds.expiry,
+            'calendar_email':      cal_email,
+            'transcripts_detected': transcripts_detected,
+        },
+    )
+    logger.info("Google Calendar connected for org %s (%s) — transcripts_detected=%s", org.slug, cal_email, transcripts_detected)
+    return _close_window_response('Google Calendar connected successfully! ✓')
+
+
+def _probe_meet_transcripts(creds):
+    """
+    Search Drive for any Google Meet transcript files created in the last 90 days.
+    Returns True if found, False if not, None if the search itself failed.
+    """
+    try:
+        from googleapiclient.discovery import build
+        from django.utils import timezone
+        from datetime import timedelta
+
+        drive = build('drive', 'v3', credentials=creds, cache_discovery=False)
+        cutoff = (timezone.now() - timedelta(days=90)).isoformat()
+        results = drive.files().list(
+            q=f"name contains 'Transcript' and mimeType='application/vnd.google-apps.document' and createdTime > '{cutoff}'",
+            fields='files(id,name,createdTime)',
+            pageSize=1,
+        ).execute()
+        found = len(results.get('files', [])) > 0
+        return found
+    except Exception as exc:
+        logger.warning("Drive transcript probe failed: %s", exc)
+        return None
+
+
+@extend_schema(tags=['calendar'], summary='Disconnect Google Calendar')
+@api_view(['POST'])
+@drf_permission_classes([IsAuthenticated])
+def calendar_disconnect(request):
+    from .models import CalendarConnection
+    org = getattr(request.user, 'organisation', None)
+    CalendarConnection.objects.filter(organisation=org).delete()
+    return Response({'detail': 'Google Calendar disconnected.'})

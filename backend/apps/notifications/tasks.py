@@ -344,3 +344,254 @@ def poll_gmail_replies():
 
     logger.info("poll_gmail_replies: %d commitments updated across all orgs", total_updated)
     return {'commitments_updated': total_updated}
+
+
+# ── Google Calendar / Meet ─────────────────────────────────────────────────────
+
+def _build_calendar_credentials(conn):
+    """Build Google OAuth2 Credentials from a CalendarConnection, refreshing if expired."""
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    expiry = None
+    if conn.token_expiry:
+        # google-auth expects a naive UTC datetime
+        expiry = conn.token_expiry.replace(tzinfo=None) if conn.token_expiry.tzinfo else conn.token_expiry
+
+    creds = Credentials(
+        token=conn.access_token,
+        refresh_token=conn.refresh_token,
+        token_uri='https://oauth2.googleapis.com/token',
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+        expiry=expiry,
+    )
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        conn.access_token = creds.token
+        conn.token_expiry = creds.expiry
+        conn.save(update_fields=['access_token', 'token_expiry'])
+    return creds
+
+
+@shared_task
+def sync_calendar_events():
+    """Every 15 min — pull Google Calendar events with Meet links for all connected orgs."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from dateutil.parser import parse as parse_dt
+    from googleapiclient.discovery import build
+    from .models import CalendarConnection, CalendarEvent
+
+    total_new = total_updated = 0
+
+    for conn in CalendarConnection.objects.select_related('organisation').all():
+        org = conn.organisation
+        try:
+            creds   = _build_calendar_credentials(conn)
+            service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
+
+            now      = timezone.now()
+            time_min = (now - timedelta(hours=24)).isoformat()
+            time_max = (now + timedelta(days=7)).isoformat()
+
+            result = service.events().list(
+                calendarId='primary',
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy='startTime',
+                maxResults=100,
+            ).execute()
+
+            for event in result.get('items', []):
+                # Extract Meet link from conferenceData
+                meet_link = meet_code = ''
+                for ep in event.get('conferenceData', {}).get('entryPoints', []):
+                    if ep.get('entryPointType') == 'video':
+                        meet_link = ep.get('uri', '')
+                        meet_code = meet_link.rstrip('/').split('/')[-1] if meet_link else ''
+                        break
+                if not meet_link:
+                    continue
+
+                starts_at = parse_dt(event['start'].get('dateTime') or event['start']['date'] + 'T00:00:00+00:00')
+                ends_at   = parse_dt(event['end'].get('dateTime')   or event['end']['date']   + 'T23:59:59+00:00')
+                if starts_at.tzinfo is None:
+                    starts_at = timezone.make_aware(starts_at)
+                if ends_at.tzinfo is None:
+                    ends_at = timezone.make_aware(ends_at)
+
+                cal_event, created = CalendarEvent.objects.get_or_create(
+                    organisation=org,
+                    google_event_id=event['id'],
+                    defaults={
+                        'title':     event.get('summary', '(no title)'),
+                        'starts_at': starts_at,
+                        'ends_at':   ends_at,
+                        'meet_link': meet_link,
+                        'meet_code': meet_code,
+                        'status':    CalendarEvent.Status.PENDING,
+                    },
+                )
+
+                if created:
+                    total_new += 1
+                    # Schedule transcript fetch 10 min after event ends (minimum 0 s for past events)
+                    delay_s = max(0, int((ends_at - now).total_seconds()) + 600)
+                    fetch_google_meet_transcript.apply_async(
+                        args=[str(cal_event.id)],
+                        countdown=delay_s,
+                    )
+                    logger.info(
+                        "sync_calendar_events: '%s' scheduled for transcript fetch in %ds",
+                        cal_event.title, delay_s,
+                    )
+                else:
+                    # Update if the event was rescheduled
+                    update_fields = []
+                    new_title = event.get('summary', '(no title)')
+                    if cal_event.title != new_title:
+                        cal_event.title = new_title
+                        update_fields.append('title')
+                    if cal_event.starts_at != starts_at:
+                        cal_event.starts_at = starts_at
+                        update_fields.append('starts_at')
+                    if cal_event.ends_at != ends_at:
+                        cal_event.ends_at = ends_at
+                        update_fields.append('ends_at')
+                    if update_fields:
+                        update_fields.append('updated_at')
+                        cal_event.save(update_fields=update_fields)
+                        total_updated += 1
+
+            conn.last_synced_at = now
+            conn.save(update_fields=['last_synced_at'])
+
+        except Exception as exc:
+            logger.error("sync_calendar_events failed for org %s: %s", org.slug, exc)
+
+    logger.info("sync_calendar_events: %d new, %d updated", total_new, total_updated)
+    return {'new': total_new, 'updated': total_updated}
+
+
+@shared_task(bind=True, max_retries=2)
+def fetch_google_meet_transcript(self, calendar_event_id: str):
+    """
+    Search Drive for a Meet transcript for a CalendarEvent, then create a Meeting
+    and queue process_meeting. Retries twice (5 min apart) on transient failures.
+    """
+    from datetime import timedelta
+    from googleapiclient.discovery import build
+    from .models import CalendarConnection, CalendarEvent
+    from apps.meetings.models import Meeting
+
+    try:
+        cal_event = CalendarEvent.objects.select_related('organisation').get(id=calendar_event_id)
+    except CalendarEvent.DoesNotExist:
+        logger.error("fetch_google_meet_transcript: event %s not found", calendar_event_id)
+        return
+
+    if cal_event.status in {CalendarEvent.Status.DONE, CalendarEvent.Status.PROCESSING}:
+        return
+
+    org = cal_event.organisation
+
+    try:
+        conn = CalendarConnection.objects.get(organisation=org)
+    except CalendarConnection.DoesNotExist:
+        logger.warning("fetch_google_meet_transcript: no CalendarConnection for org %s", org.slug)
+        cal_event.status = CalendarEvent.Status.FAILED
+        cal_event.error  = 'Calendar not connected'
+        cal_event.save(update_fields=['status', 'error', 'updated_at'])
+        return
+
+    cal_event.status = CalendarEvent.Status.FETCHING
+    cal_event.save(update_fields=['status', 'updated_at'])
+
+    try:
+        creds = _build_calendar_credentials(conn)
+        drive = build('drive', 'v3', credentials=creds, cache_discovery=False)
+
+        # Search Drive for transcript docs created on or after meeting start
+        cutoff = (cal_event.starts_at - timedelta(minutes=5)).isoformat()
+        results = drive.files().list(
+            q=(
+                f"name contains 'Transcript' and "
+                f"mimeType='application/vnd.google-apps.document' and "
+                f"createdTime > '{cutoff}'"
+            ),
+            fields='files(id,name,createdTime)',
+            orderBy='createdTime desc',
+            pageSize=20,
+        ).execute()
+        files = results.get('files', [])
+
+        # Match by meet code or title keywords; fall back to most recent
+        transcript_file_id = transcript_title = ''
+        title_words = [w for w in cal_event.title.lower().split() if len(w) > 3]
+        for f in files:
+            name_lower = f['name'].lower()
+            if (cal_event.meet_code and cal_event.meet_code.lower() in name_lower) or \
+               any(w in name_lower for w in title_words):
+                transcript_file_id = f['id']
+                transcript_title   = f['name']
+                break
+        if not transcript_file_id and files:
+            transcript_file_id = files[0]['id']
+            transcript_title   = files[0]['name']
+
+        if not transcript_file_id:
+            cal_event.status = CalendarEvent.Status.NO_TRANSCRIPT
+            cal_event.save(update_fields=['status', 'updated_at'])
+            logger.info("fetch_google_meet_transcript: no transcript for '%s'", cal_event.title)
+            return
+
+        cal_event.drive_file_id = transcript_file_id
+        cal_event.status        = CalendarEvent.Status.PROCESSING
+        cal_event.save(update_fields=['drive_file_id', 'status', 'updated_at'])
+
+        content = drive.files().export(
+            fileId=transcript_file_id,
+            mimeType='text/plain',
+        ).execute()
+        transcript_text = content.decode('utf-8', errors='replace') if isinstance(content, bytes) else str(content)
+
+        if not transcript_text.strip():
+            cal_event.status = CalendarEvent.Status.NO_TRANSCRIPT
+            cal_event.error  = 'Transcript file was empty'
+            cal_event.save(update_fields=['status', 'error', 'updated_at'])
+            return
+
+        meeting = Meeting.objects.create(
+            organisation=org,
+            title=cal_event.title or transcript_title,
+            platform=Meeting.Platform.UPLOAD,
+            occurred_at=cal_event.starts_at,
+            raw_transcript=transcript_text,
+            word_count=len(transcript_text.split()),
+            external_id=cal_event.google_event_id,
+            external_url=cal_event.meet_link,
+        )
+
+        cal_event.meeting = meeting
+        cal_event.status  = CalendarEvent.Status.DONE
+        cal_event.save(update_fields=['meeting', 'status', 'updated_at'])
+
+        from apps.meetings.tasks import process_meeting
+        process_meeting.delay(str(meeting.id))
+
+        logger.info(
+            "fetch_google_meet_transcript: created meeting %s from '%s' for org %s",
+            meeting.id, cal_event.title, org.slug,
+        )
+
+    except Exception as exc:
+        logger.error("fetch_google_meet_transcript failed for event %s: %s", calendar_event_id, exc)
+        try:
+            cal_event.status = CalendarEvent.Status.FAILED
+            cal_event.error  = str(exc)[:500]
+            cal_event.save(update_fields=['status', 'error', 'updated_at'])
+        except Exception:
+            pass
+        raise self.retry(exc=exc, countdown=300)

@@ -18,6 +18,10 @@ from .views import (
     notification_unread_count,
     notification_mark_read,
     notification_mark_all_read,
+    calendar_status,
+    calendar_oauth_start,
+    calendar_oauth_callback,
+    calendar_disconnect,
 )
 
 urlpatterns = [
@@ -39,4 +43,8 @@ urlpatterns = [
     path('notifications/unread-count/',       notification_unread_count,  name='notification-unread-count'),
     path('notifications/mark-all-read/',      notification_mark_all_read, name='notification-mark-all-read'),
     path('notifications/<uuid:pk>/read/',     notification_mark_read,     name='notification-mark-read'),
+    path('calendar/status/',                  calendar_status,            name='calendar-status'),
+    path('calendar/oauth/start/',             calendar_oauth_start,       name='calendar-oauth-start'),
+    path('calendar/oauth/callback/',          calendar_oauth_callback,    name='calendar-oauth-callback'),
+    path('calendar/disconnect/',              calendar_disconnect,        name='calendar-disconnect'),
 ]

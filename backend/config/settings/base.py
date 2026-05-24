@@ -139,9 +139,10 @@ SLACK_CLIENT_ID      = config('SLACK_CLIENT_ID',      default='')
 SLACK_CLIENT_SECRET  = config('SLACK_CLIENT_SECRET',  default='')
 SLACK_OAUTH_REDIRECT_URI = config('SLACK_OAUTH_REDIRECT_URI', default='http://localhost:8000/api/v1/slack/oauth/callback/')
 
-GOOGLE_CLIENT_ID          = config('GOOGLE_CLIENT_ID',          default='')
-GOOGLE_CLIENT_SECRET      = config('GOOGLE_CLIENT_SECRET',      default='')
-GOOGLE_GMAIL_REDIRECT_URI = config('GOOGLE_GMAIL_REDIRECT_URI', default='http://localhost:8000/api/v1/gmail/oauth/callback/')
+GOOGLE_CLIENT_ID             = config('GOOGLE_CLIENT_ID',             default='')
+GOOGLE_CLIENT_SECRET         = config('GOOGLE_CLIENT_SECRET',         default='')
+GOOGLE_GMAIL_REDIRECT_URI    = config('GOOGLE_GMAIL_REDIRECT_URI',    default='http://localhost:8000/api/v1/gmail/oauth/callback/')
+GOOGLE_CALENDAR_REDIRECT_URI = config('GOOGLE_CALENDAR_REDIRECT_URI', default='https://api.verato.twocents.ai/api/v1/calendar/oauth/callback/')
 
 APP_BASE_URL = config('APP_BASE_URL', default='http://localhost:3000')
 

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.utils.html import format_html, mark_safe
 
-from .models import NudgeLog, NudgeDashboard, GmailPollLog, InAppNotification
+from .models import NudgeLog, NudgeDashboard, GmailPollLog, InAppNotification, CalendarEvent, CalendarConnection
 
 
 # ── NudgeLog ──────────────────────────────────────────────────────────────────
@@ -184,3 +184,84 @@ class InAppNotificationAdmin(admin.ModelAdmin):
     @admin.display(description='Message')
     def short_message(self, obj):
         return obj.message[:80]
+
+
+# ── CalendarConnection ────────────────────────────────────────────────────────
+
+@admin.register(CalendarConnection)
+class CalendarConnectionAdmin(admin.ModelAdmin):
+    list_display    = ['organisation', 'calendar_email', 'transcripts_badge',
+                       'last_synced_at_display', 'connected_at']
+    list_filter     = ['transcripts_detected']
+    readonly_fields = ['id', 'organisation', 'calendar_email', 'connected_at',
+                       'last_synced_at', 'transcripts_detected', 'access_token', 'refresh_token', 'token_expiry']
+    ordering        = ['-connected_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Last synced', ordering='last_synced_at')
+    def last_synced_at_display(self, obj):
+        return obj.last_synced_at.strftime('%-d %b %Y %H:%M') if obj.last_synced_at else '—'
+
+    @admin.display(description='Transcripts')
+    def transcripts_badge(self, obj):
+        if obj.transcripts_detected is True:
+            return mark_safe('<span style="background:#22c55e;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Detected</span>')
+        if obj.transcripts_detected is False:
+            return mark_safe('<span style="background:#f59e0b;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Not detected</span>')
+        return mark_safe('<span style="background:#6b7280;color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">Unknown</span>')
+
+
+# ── CalendarEvent ─────────────────────────────────────────────────────────────
+
+_EVENT_STATUS_COLOURS = {
+    'pending':       '#6b7280',
+    'fetching':      '#3b82f6',
+    'processing':    '#8b5cf6',
+    'done':          '#22c55e',
+    'no_transcript': '#f59e0b',
+    'failed':        '#ef4444',
+}
+
+
+@admin.register(CalendarEvent)
+class CalendarEventAdmin(admin.ModelAdmin):
+    list_display    = ['starts_at_display', 'title', 'organisation', 'status_badge',
+                       'meeting_link', 'drive_file_id_short', 'updated_at']
+    list_filter     = ['status', 'organisation']
+    search_fields   = ['title', 'google_event_id', 'meet_code']
+    readonly_fields = ['id', 'organisation', 'google_event_id', 'title', 'starts_at', 'ends_at',
+                       'meet_link', 'meet_code', 'status', 'drive_file_id', 'meeting', 'error',
+                       'created_at', 'updated_at']
+    ordering        = ['-starts_at']
+
+    def has_add_permission(self, request):               return False
+    def has_change_permission(self, request, obj=None):  return False
+
+    @admin.display(description='Starts at', ordering='starts_at')
+    def starts_at_display(self, obj):
+        return obj.starts_at.strftime('%-d %b %Y %H:%M')
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        colour = _EVENT_STATUS_COLOURS.get(obj.status, '#6b7280')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;border-radius:9px;font-size:11px;font-weight:600">{}</span>',
+            colour, obj.get_status_display(),
+        )
+
+    @admin.display(description='Meeting')
+    def meeting_link(self, obj):
+        if not obj.meeting_id:
+            return '—'
+        return format_html(
+            '<a href="/admin/meetings/meeting/{}/change/">{}</a>',
+            obj.meeting_id, str(obj.meeting_id)[:8],
+        )
+
+    @admin.display(description='Drive file')
+    def drive_file_id_short(self, obj):
+        if not obj.drive_file_id:
+            return '—'
+        return obj.drive_file_id[:16] + '…'
