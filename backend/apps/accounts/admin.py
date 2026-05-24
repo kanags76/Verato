@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.utils.html import mark_safe
 from .models import Invitation, Organisation, Person, User
 
 
@@ -117,11 +118,31 @@ class OrganisationAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display  = ['username', 'email', 'organisation', 'is_staff']
-    list_filter   = ['organisation', 'is_staff']
+    list_display  = ['email', 'first_name', 'organisation', 'is_org_admin', 'slack_status', 'gmail_status', 'is_staff']
+    list_filter   = ['organisation', 'is_org_admin', 'is_staff']
     fieldsets     = UserAdmin.fieldsets + (
-        ('Organisation', {'fields': ('organisation',)}),
+        ('Organisation', {'fields': ('organisation', 'is_org_admin')}),
     )
+
+    def _org_settings(self, obj):
+        return (obj.organisation.settings or {}) if obj.organisation else {}
+
+    @admin.display(description='Slack')
+    def slack_status(self, obj):
+        connected = bool(self._org_settings(obj).get('slack_token'))
+        if connected:
+            workspace = self._org_settings(obj).get('slack_workspace_name', '✓')
+            return mark_safe(f'<span style="color:#22c55e;font-weight:600">● {workspace}</span>')
+        return mark_safe('<span style="color:#9ca3af">— not connected</span>')
+
+    @admin.display(description='Gmail')
+    def gmail_status(self, obj):
+        s = self._org_settings(obj)
+        connected = bool(s.get('gmail_refresh_token'))
+        if connected:
+            email = s.get('gmail_email', '✓')
+            return mark_safe(f'<span style="color:#22c55e;font-weight:600">● {email}</span>')
+        return mark_safe('<span style="color:#9ca3af">— not connected</span>')
 
 
 @admin.register(Person)
