@@ -391,6 +391,57 @@ Acceptance criteria
 - If Gemini couldn't parse the intent, notification still fires with "replied via email"
 API needs: ✅ Gemini parse in poll_gmail_replies task · ✅ create_cos_notification called after parse
 
+# Epic 9 — Auth, Legal & Security
+
+## US-9.1 — Accept terms before creating an account
+As a: New user
+I want to: See and accept the Terms of Service and Privacy Policy before I create an account
+So that: I know what I'm agreeing to and the product has legal cover
+Acceptance criteria
+- Register screen has a required checkbox: "I agree to the Terms of Service and Privacy Policy" with hyperlinked terms
+- Checkbox must be checked to enable the Create Account button
+- Backend rejects registration with 400 if `terms_accepted=true` not in payload
+- `terms_accepted_at` timestamp saved on the User record
+- Static `/terms` and `/privacy` pages exist in the frontend
+API needs: 🆕 `terms_accepted` field on `POST /auth/register/` · 🆕 `User.terms_accepted_at` field · 🆕 `/terms` and `/privacy` static pages
+
+## US-9.2 — Verify my email with a one-time code when I log in
+As a: CoS logging in
+I want to: Confirm my identity with a 6-digit code sent to my email after entering my password
+So that: My org's data is protected even if my password is compromised
+Acceptance criteria
+- After correct email + password, a 6-digit OTP is sent to the registered email
+- Login screen advances to an OTP entry screen (6 input boxes, auto-advance between digits)
+- OTP expires in 10 minutes — expired code shows clear error with "Resend code" option
+- Max 5 wrong attempts before session is invalidated
+- Correct OTP → JWT issued, user lands on Dashboard
+- Email subject: "Your Verato login code" — plain, no branding noise
+API needs: 🆕 `POST /auth/token/` now returns `{otp_required: true, session_token}` · 🆕 `POST /auth/token/verify-otp/ {session_token, otp}` → JWT
+
+## US-9.3 — Reset my password when I've forgotten it
+As a: User who has forgotten their password
+I want to: Reset my password using a code sent to my email
+So that: I can regain access without contacting support
+Acceptance criteria
+- "Forgot password?" link on Login screen
+- Email input screen: enter registered email, click "Send reset code"
+- Response is always the same message regardless of whether email exists (prevents enumeration)
+- OTP entry screen — same 6-box design as login OTP
+- After correct OTP: new password screen (min 8 chars, confirm field)
+- On success: all existing sessions invalidated, redirect to Login with "Password updated" message
+- OTP expires in 10 minutes and is single-use
+API needs: 🆕 `POST /auth/password/reset/ {email}` · 🆕 `POST /auth/password/reset/confirm/ {email, otp, new_password}`
+
+## US-9.4 — Read the Privacy Policy and Terms at any time
+As a: User
+I want to: Access the Privacy Policy and Terms of Service from the login page and settings
+So that: I can review what data is collected and how it's used at any time
+Acceptance criteria
+- Footer links on Login and Register screens
+- Link in Settings → Organisation tab
+- Pages are readable on mobile, no login required
+API needs: Static pages only — no backend required
+
 # Out of scope for v0.3 (deferred user stories)
 These have been considered and intentionally postponed:
 

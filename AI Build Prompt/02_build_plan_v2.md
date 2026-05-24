@@ -566,26 +566,125 @@ All frontend screens built by Google AI Studio, committed to `frontend/`. Stack:
 
 ---
 
-### Phase 3A — Org & Team Management ← NEXT
+### Phase 3A — Auth, Legal & Team Management ← NEXT (IMMEDIATE)
 
-**Goal:** CoS can fully manage their organisation, see pending invites, and onboard colleagues without any admin workarounds.
+**Goal:** Production-ready auth (OTP, password reset), legal compliance (privacy policy + terms), and full team management before any design partner goes live.
 
-#### Sprint 1 — Invitations management
+---
+
+#### Sprint 1 — Privacy Policy, Terms & User Consent
 
 | Item | Detail |
 |---|---|
-| `GET /api/v1/auth/invitations/` | List all sent invitations with status (pending / accepted / expired). Already referenced in user stories; endpoint missing. |
-| `POST /api/v1/auth/invitations/{id}/resend/` | Re-send invite email and refresh the 7-day token. |
+| Privacy Policy page | Static page at `/privacy` — covers data collected, processing, retention, user rights (GDPR-lite). Hosted in frontend. |
+| Terms of Service page | Static page at `/terms` — covers acceptable use, liability, subscription terms. Hosted in frontend. |
+| `User.terms_accepted_at` | New `DateTimeField(null=True)` on User model. Migration required. |
+| Register screen | Add "I agree to the Terms of Service and Privacy Policy" checkbox (required). On submit, backend sets `terms_accepted_at = now()`. |
+| Login screen | Footer links to `/terms` and `/privacy`. |
+| Backend enforcement | `POST /auth/register/` — reject with 400 if `terms_accepted=true` not in payload. Set `terms_accepted_at` on user creation. |
+| Backend enforcement | `GET /auth/me/` — include `terms_accepted_at` in response so frontend can detect users who pre-date the policy and prompt re-acceptance. |
+
+---
+
+#### Sprint 2 — Email OTP for Login (Second Factor)
+
+Every login triggers a 6-digit OTP sent to the user's registered email. JWT is only issued after OTP is verified.
+
+**New model: `EmailOTP`**
+```
+id             UUIDField (PK)
+user           ForeignKey(User)
+code           CharField(6) — random 6-digit string
+purpose        CharField — 'login' | 'password_reset'
+created_at     DateTimeField(auto_now_add)
+expires_at     DateTimeField — created_at + 10 minutes
+used_at        DateTimeField(null) — set on successful verify
+```
+
+**New flow:**
+
+```
+Step 1: POST /auth/token/ {email, password}
+  → verifies password
+  → generates 6-digit OTP, saves EmailOTP(purpose='login', expires_in=10min)
+  → sends OTP email via SendGrid
+  → returns { "otp_required": true, "session_token": "<signed token containing user_id>" }
+  (no JWT issued yet)
+
+Step 2: POST /auth/token/verify-otp/ {session_token, otp}
+  → decodes session_token (django.core.signing, max_age=600s)
+  → validates OTP matches and is not expired or used
+  → marks OTP used_at = now()
+  → returns { access, refresh } JWT tokens (same as current login response)
+```
+
+**Rate limiting:** Max 5 OTP attempts per session_token before it's invalidated. OTP expires in 10 minutes.
+
+**Endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/auth/token/` | POST | Now returns `{otp_required: true, session_token}` instead of JWT |
+| `/api/v1/auth/token/verify-otp/` | POST | Validates OTP → returns JWT |
+
+---
+
+#### Sprint 3 — Forgot Password with Email OTP
+
+Passwordless reset: user enters email → receives OTP → enters OTP → sets new password. No magic links, no temporary passwords.
+
+**Reuses `EmailOTP` model with `purpose='password_reset'`.**
+
+**New flow:**
+
+```
+Step 1: POST /auth/password/reset/ {email}
+  → finds user by email (silently succeeds even if email not found — no enumeration)
+  → generates OTP(purpose='password_reset'), sends email
+  → returns { "detail": "If that email is registered, a reset code has been sent." }
+
+Step 2: POST /auth/password/reset/confirm/ {email, otp, new_password}
+  → validates OTP for that email (not expired, not used)
+  → validates new_password (min 8 chars)
+  → sets user.password = make_password(new_password)
+  → marks OTP used_at = now()
+  → blacklists all existing refresh tokens for that user
+  → returns { "detail": "Password updated. Please log in." }
+```
+
+**Endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/auth/password/reset/` | POST | Send OTP to registered email |
+| `/api/v1/auth/password/reset/confirm/` | POST | Verify OTP + set new password |
+
+**Frontend screens needed:**
+- "Forgot password?" link on Login → email input screen
+- OTP entry screen (6 boxes, auto-advance)
+- New password screen
+- Success → redirect to Login
+
+---
+
+#### Sprint 4 — Invitations Management
+
+| Item | Detail |
+|---|---|
+| `GET /api/v1/auth/invitations/` | List all sent invitations with status (pending / accepted / expired). |
+| `POST /api/v1/auth/invitations/{id}/resend/` | Re-send invite email, refresh 7-day token. |
 | `DELETE /api/v1/auth/invitations/{id}/` | Revoke a pending invitation. |
-| Frontend: Settings → Team tab | Show members table (name, email, role, status) + invite form + resend/revoke actions on pending rows. |
+| Frontend: Settings → Team tab | Members table (name, email, role, status) + invite form + resend/revoke on pending rows. |
 
-#### Sprint 2 — Meetings commitment count
+---
+
+#### Sprint 5 — Meetings Commitment Count
 
 | Item | Detail |
 |---|---|
-| `commitment_count` on `MeetingSerializer` | Annotate queryset: `Count('commitments')`. Read-only field. |
-| `pending_count` on `MeetingSerializer` | Annotate: `Count('commitments', filter=Q(commitments__status='pending_review'))`. |
-| Frontend: Meetings list | Each row shows `12 commitments · 3 pending review` so CoS can re-open meetings that still need review. |
+| `commitment_count` on `MeetingSerializer` | `Count('commitments')` annotation. Read-only field. |
+| `pending_count` on `MeetingSerializer` | `Count('commitments', filter=Q(commitments__status='pending_review'))`. |
+| Frontend: Meetings list | Each row shows `12 commitments · 3 pending review`. |
 
 ---
 
