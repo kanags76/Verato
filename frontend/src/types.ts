@@ -1,3 +1,5 @@
+export const APP_VERSION = '2.01';
+
 export interface Commitment {
   id: string;
   title: string;
@@ -71,6 +73,7 @@ export interface Meeting {
   transcript_url?: string;
   participants?: string[];
   summary?: string;
+  external_url?: string;
 }
 
 export interface Clarification {

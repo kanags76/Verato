@@ -367,3 +367,33 @@ export const notificationService = {
   },
 };
 
+export const calendarService = {
+  getStatus: async (): Promise<{ connected: boolean; email?: string; transcripts_detected: boolean | null }> => {
+    const { data } = await apiClient.get('calendar/status/');
+    return data;
+  },
+  connect: (accessToken: string) => {
+    const base = import.meta.env.VITE_API_URL;
+    const url = `${base}calendar/oauth/start/?auth=${accessToken}`;
+    return window.open(url, '_blank', 'width=500,height=650');
+  },
+  disconnect: async (): Promise<void> => {
+    await apiClient.post('calendar/disconnect/');
+  },
+};
+
+export const zoomService = {
+  getStatus: async (): Promise<{ connected: boolean; email?: string }> => {
+    const { data } = await apiClient.get('zoom/status/');
+    return data;
+  },
+  connect: (accessToken: string) => {
+    const base = import.meta.env.VITE_API_URL;
+    const url = `${base}zoom/oauth/start/?auth=${accessToken}`;
+    return window.open(url, '_blank', 'width=500,height=650');
+  },
+  disconnect: async (): Promise<void> => {
+    await apiClient.post('zoom/disconnect/');
+  },
+};
+

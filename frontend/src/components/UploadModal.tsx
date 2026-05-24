@@ -70,7 +70,6 @@ export const UploadModal = ({ isOpen, onClose }: UploadModalProps) => {
   });
 
   const handleUpload = () => {
-    if (!meetingTitle.trim()) return;
     if (uploadMode === "file" && file) {
       uploadMutation.mutate({ file, title: meetingTitle, occurredAt: meetingDate });
     } else if (uploadMode === "paste" && pastedText.trim()) {
@@ -167,7 +166,7 @@ const UploadStep = ({
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-2">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-          Meeting Title <span className="text-rose-500">*</span>
+          Meeting Title
         </label>
         <input 
           type="text"
@@ -274,7 +273,7 @@ const UploadStep = ({
 
     <div className="flex flex-col items-center gap-6 pt-4">
       <Button 
-        disabled={isLoading || !meetingTitle.trim() || (uploadMode === "file" ? !file : !pastedText.trim())}
+        disabled={isLoading || (uploadMode === "file" ? !file : !pastedText.trim())}
         onClick={onUpload}
         className="w-full max-w-sm h-16 text-lg font-black rounded-3xl shadow-2xl shadow-blue-500/30 bg-blue-600 hover:bg-blue-700 text-white border-none"
       >

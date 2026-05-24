@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { KeyRound, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { APP_VERSION } from '../types';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -109,6 +110,9 @@ export const Login = () => {
 
         <p className="text-center mt-8 text-slate-500 text-sm font-medium">
           New to the platform? <Link to="/register" className="text-blue-600 font-bold hover:underline">Create an Account</Link>
+        </p>
+        <p className="text-center mt-4 text-slate-400 text-xs font-bold uppercase tracking-widest">
+          Version {APP_VERSION}
         </p>
       </motion.div>
     </div>

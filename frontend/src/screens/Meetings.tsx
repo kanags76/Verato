@@ -159,6 +159,12 @@ export const Meetings = () => {
                           {meeting.title}
                         </h3>
                         <Badge variant="neutral">{meeting.type}</Badge>
+                        {meeting.external_url?.includes("meet.google.com") && (
+                          <Badge variant="success" className="gap-1.5 flex items-center">
+                            <CalendarIcon className="w-3 h-3" />
+                            Google Meet
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
                         <span className="flex items-center gap-1.5 capitalize">

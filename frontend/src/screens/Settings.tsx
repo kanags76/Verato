@@ -8,6 +8,8 @@ import {
   Globe, 
   Bell, 
   Trash2,
+  Calendar,
+  Video,
   Plus,
   CheckCircle2,
   FileUp,
@@ -25,13 +27,14 @@ import { Badge } from "@/src/components/ui/Badge";
 import { Avatar } from "@/src/components/ui/Avatar";
 import { cn } from "@/src/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { slackService, importService, nudgeSettingsService, gmailService } from "@/src/lib/api/services";
+import { slackService, importService, nudgeSettingsService, gmailService, calendarService, zoomService } from "@/src/lib/api/services";
 import { authService } from "@/src/lib/api/auth";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import { useRef, DragEvent, ChangeEvent } from "react";
 import { ImportSuccessModal } from "@/src/components/ImportSuccessModal";
 import { LinkSlackPeopleModal } from "@/src/components/LinkSlackPeopleModal";
+import { APP_VERSION } from "../types";
 
 export const Settings = () => {
   const queryClient = useQueryClient();
@@ -114,6 +117,73 @@ export const Settings = () => {
       queryClient.invalidateQueries({ queryKey: ['gmail-status'] });
     }
   });
+
+  const { data: calendarStatus, isLoading: isLoadingCalendar } = useQuery({
+    queryKey: ['calendar-status'],
+    queryFn: () => calendarService.getStatus(),
+  });
+
+  const disconnectCalendarMutation = useMutation({
+    mutationFn: () => calendarService.disconnect(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar-status'] });
+    }
+  });
+
+  const { data: zoomStatus, isLoading: isLoadingZoom } = useQuery({
+    queryKey: ['zoom-status'],
+    queryFn: () => zoomService.getStatus(),
+  });
+
+  const disconnectZoomMutation = useMutation({
+    mutationFn: () => zoomService.disconnect(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['zoom-status'] });
+    }
+  });
+
+  const handleZoomConnect = () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    const popup = zoomService.connect(token);
+    
+    if (popup) {
+      const timer = setInterval(async () => {
+        try {
+          if (popup.closed) {
+            clearInterval(timer);
+            queryClient.invalidateQueries({ queryKey: ['zoom-status'] });
+          }
+        } catch (err) {
+          console.error("Error polling zoom status", err);
+          if (popup.closed) {
+            clearInterval(timer);
+          }
+        }
+      }, 500);
+    }
+  };
+
+  const handleCalendarConnect = () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    const popup = calendarService.connect(token);
+    if (popup) {
+      const timer = setInterval(async () => {
+        try {
+          if (popup.closed) {
+            clearInterval(timer);
+            queryClient.invalidateQueries({ queryKey: ['calendar-status'] });
+          }
+        } catch (err) {
+          console.error("Error polling calendar status", err);
+          if (popup.closed) {
+            clearInterval(timer);
+          }
+        }
+      }, 500);
+    }
+  };
 
   const handleGmailConnect = () => {
     const API_URL = (import.meta.env.VITE_API_URL || 'https://api.verato.twocents.ai/api/v1').replace(/\/$/, '');
@@ -304,6 +374,120 @@ export const Settings = () => {
           </Card>
         </motion.div>
 
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="space-y-6">
+          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+              <div className="flex gap-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
+                  <Video className="w-9 h-9" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">Zoom</h2>
+                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Zoom account to synchronize meetings.</p>
+                  
+                  {isLoadingZoom ? (
+                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Checking Status...
+                    </div>
+                  ) : zoomStatus?.connected ? (
+                    <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Status: Connected as {zoomStatus.email}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Status: Disconnected
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                {zoomStatus?.connected ? (
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => disconnectZoomMutation.mutate()}
+                    disabled={disconnectZoomMutation.isPending}
+                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                  >
+                    {disconnectZoomMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleZoomConnect}
+                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                  >
+                    Connect Zoom
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-6">
+          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+              <div className="flex gap-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
+                  <Calendar className="w-9 h-9" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">Google Calendar</h2>
+                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Google Calendar to sync meetings and identify Google Meet links.</p>
+                  
+                  {isLoadingCalendar ? (
+                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Checking Status...
+                    </div>
+                  ) : calendarStatus?.connected ? (
+                    <div className="space-y-2 text-left">
+                      <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Status: Connected as {calendarStatus.email}
+                      </div>
+                      {calendarStatus.transcripts_detected === false && (
+                        <div className="flex items-center gap-2 text-amber-700 font-black text-[10px] uppercase tracking-[0.2em] bg-amber-100/50 border border-amber-200 px-3 py-1.5 rounded-xl inline-flex">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Google Meet transcript recording is disabled.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Status: Disconnected
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                {calendarStatus?.connected ? (
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => disconnectCalendarMutation.mutate()}
+                    disabled={disconnectCalendarMutation.isPending}
+                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                  >
+                    {disconnectCalendarMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleCalendarConnect}
+                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                  >
+                    Connect Google Calendar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
             <div className="flex gap-6 mb-8">
@@ -446,6 +630,11 @@ export const Settings = () => {
               >
                 Launch Importer
               </Button>
+            </div>
+            <div className="mt-8 pt-8 border-t border-slate-100 text-center">
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
+                Version {APP_VERSION}
+              </p>
             </div>
           </Card>
         </motion.div>

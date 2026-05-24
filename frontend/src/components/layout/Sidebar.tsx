@@ -14,6 +14,7 @@ import { cn } from "@/src/lib/utils";
 import { useUI } from "./AppShell";
 import { useQuery } from "@tanstack/react-query";
 import { authService } from "../../lib/api/auth";
+import { APP_VERSION } from "../../types";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -96,6 +97,9 @@ export const Sidebar = () => {
           <LogOut className="w-4 h-4 text-slate-500 group-hover:text-rose-400/70" />
           Sign Out
         </button>
+        <p className="text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest pt-2">
+          Version {APP_VERSION}
+        </p>
       </div>
     </div>
   );
