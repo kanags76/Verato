@@ -967,6 +967,8 @@ def calendar_oauth_callback(request):
 
     # Exchange code for tokens
     try:
+        import os
+        os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'  # Google adds openid to returned scopes
         flow = Flow.from_client_config(
             {
                 'web': {
