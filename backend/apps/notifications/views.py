@@ -93,7 +93,7 @@ def gmail_oauth_callback(request):
         return _close_window_response('Missing code or state.', error=True)
 
     try:
-        data   = signing.loads(state, salt='gmail-oauth', max_age=600)
+        data   = signing.loads(state, salt='gmail-oauth', max_age=3600)
         org_id = data['org_id']
     except signing.BadSignature:
         return _close_window_response('Invalid state parameter.', error=True)
@@ -751,7 +751,7 @@ def slack_oauth_callback(request):
         return _close_window_response('Missing code or state.', error=True)
 
     try:
-        data   = signing.loads(state, salt='slack-oauth', max_age=600)
+        data   = signing.loads(state, salt='slack-oauth', max_age=3600)
         org_id = data['org_id']
     except signing.BadSignature:
         return _close_window_response('Invalid state parameter.', error=True)
