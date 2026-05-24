@@ -266,15 +266,18 @@ class MeetingUploadView(APIView):
         if data.get('file'):
             transcript = extract_text_from_file(data['file'])
 
+        occurred_at = data.get('occurred_at') or timezone.now()
+        title = data.get('title') or f"Meeting {occurred_at.strftime('%-d %b %Y')}"
         meeting = Meeting.objects.create(
             organisation=org,
-            title=data['title'],
-            occurred_at=data.get('occurred_at') or timezone.now(),
+            title=title,
+            occurred_at=occurred_at,
             platform=Meeting.Platform.UPLOAD,
             raw_transcript=transcript,
             word_count=len(transcript.split()),
             processing_status=Meeting.ProcessingStatus.PENDING,
         )
+
         if data.get('file'):
             meeting.source_file = data['file']
             meeting.save(update_fields=['source_file'])

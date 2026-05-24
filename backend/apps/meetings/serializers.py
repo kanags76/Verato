@@ -71,7 +71,7 @@ class MeetingStatusSerializer(serializers.Serializer):
 
 
 class MeetingUploadSerializer(serializers.Serializer):
-    title        = serializers.CharField(max_length=500)
+    title        = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
     occurred_at  = serializers.DateTimeField(required=False, default=None)
     participants = serializers.CharField(
         required=False, default='', allow_blank=True,
