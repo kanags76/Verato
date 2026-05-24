@@ -272,7 +272,7 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W14.5 | Gemini auto-title, optional meeting title on upload + import, OAUTHLIB_RELAX_TOKEN_SCOPE fix | ✓ Done |
 | W15 | Zoom OAuth + webhook + recording transcript pipeline — ZoomConnection, ZoomRecording, fetch task, admin | ✓ Done |
 | W15.5 | Slack user management — workspace search, import, full workspace sync | ✓ Done |
-| — | Frontend: Calendar + Zoom settings cards, notification bell | Next |
+| W16 | Frontend: Zoom + Calendar settings cards, notification bell, all screens complete | ✓ Done |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
@@ -281,7 +281,8 @@ PHASE 2.5 — Production hardening      ✓ COMPLETE (live at api.verato.twocent
 PHASE 2.6 — Nudge engine + Gmail      ✓ COMPLETE
 PHASE 2.7 — In-app notifications      ✓ COMPLETE
 PHASE 2.8 — Passive ingestion         ✓ COMPLETE (Google Meet + Zoom auto-processing)
-PHASE 3 — Frontend integrations UI    ← Next
+PHASE 2.9 — Frontend integrations UI  ✓ COMPLETE (Calendar + Zoom cards, notification bell)
+PHASE 3 — Design partner onboarding   ← Next
 ```
 
 ---

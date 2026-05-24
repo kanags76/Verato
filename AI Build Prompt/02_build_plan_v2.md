@@ -547,29 +547,31 @@ Both Google Meet (via Calendar + Drive) and Zoom (via webhook + recording downlo
 
 ---
 
-### Phase 3 — Frontend Integrations UI ← NEXT
+### Week 16 — Frontend Complete ✓ DONE
 
-Full plan: **`06_phase2_frontend_build_plan.md`**
+All frontend screens built by Google AI Studio, committed to `frontend/`. Stack: React 19 + Vite + TypeScript + Tailwind v4 + React Query.
 
-Build the Next.js frontend by porting the working HTML prototype (`Design/Verato/Verato.html`) to production code. All 9 screens are already designed and responsive.
+**Screens:** Dashboard · Commitment Detail · Meetings · Meeting Detail · People · Settings · Login · Register · Onboarding (Connect Slack, Import Tracker)
 
-**Stack:** Next.js 14 (App Router) · TypeScript · Tailwind CSS · React Query · React Hook Form + Zod · Playwright E2E
+**Components:** UploadModal · ClarificationModal · ImportSuccessModal · LinkSlackPeopleModal · ManualSlackLinkModal · NotificationsModal · AppShell · Sidebar · TopBar
 
-**7 weeks:**
-1. Foundation — project setup, design system, auth, shared components
-2. Sign-up + onboarding (plan picker → Slack → import)
-3. Dashboard (stat cards, status tabs, priority/tag filters, commitment rows)
-4. Commitment detail (meta grid, actions, tags, audit trail)
-5. Upload + extraction review (upload form, review queue, bulk-confirm, swipe-mobile)
-6. People, Meetings list, Settings (org, Slack, team/invites)
-7. Mobile polish, error states, Playwright E2E, deploy to Vercel
+**Integrations wired in frontend:**
+- Slack: connect/disconnect/test/user search
+- Gmail: connect/disconnect/polling frequency
+- Google Calendar: connect/disconnect with `transcripts_detected` warning badge
+- Zoom: connect/disconnect with popup OAuth flow
+- Notification bell: unread count badge, notification feed modal, mark read
 
-**Backend changes needed (3 small additions before Week 1):**
-- `GET /api/v1/auth/invitations/` — list org pending invites
+**API services:** `slackService`, `gmailService`, `calendarService`, `zoomService`, `nudgeSettingsService`, `importService`, `authService`
+
+---
+
+### Phase 3 — Design Partner Onboarding ← NEXT
+
+**Remaining backend gaps (small):**
+- `GET /api/v1/auth/invitations/` — list org pending invites (Settings → Team tab)
 - `meeting` filter param on `POST /commitments/bulk-confirm/`
 - `commitment_count` + `pending_count` on MeetingSerializer
-
-**Design reference:** `Design/Verato/` — dark theme, JetBrains Mono, single 768px breakpoint
 
 ---
 
