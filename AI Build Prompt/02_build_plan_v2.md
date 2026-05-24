@@ -566,53 +566,96 @@ All frontend screens built by Google AI Studio, committed to `frontend/`. Stack:
 
 ---
 
-### Phase 3 — Design Partner Onboarding ← NEXT
+### Phase 3A — Org & Team Management ← NEXT
 
-**Remaining backend gaps (small):**
-- `GET /api/v1/auth/invitations/` — list org pending invites (Settings → Team tab)
-- `meeting` filter param on `POST /commitments/bulk-confirm/`
-- `commitment_count` + `pending_count` on MeetingSerializer
+**Goal:** CoS can fully manage their organisation, see pending invites, and onboard colleagues without any admin workarounds.
 
----
+#### Sprint 1 — Invitations management
 
-### Phase 3 — AWS Deployment (after frontend is stable)
-
-```
-□ Create RDS PostgreSQL 18
-□ Create ElastiCache Redis (cache.t4g.micro)
-□ Create S3 bucket for transcripts (verato-transcripts-prod)
-□ Create ECR repository for Docker images
-□ Create ECS cluster (verato)
-□ Write Dockerfile for Django
-□ Build + push Docker image to ECR
-□ Create ECS task definitions: api / celery-worker / celery-beat
-□ Create Application Load Balancer → HTTPS → ECS API
-□ Store secrets in AWS Secrets Manager
-□ Run Django migrations via ECS run-task
-□ Verify: https://api.verato.app/api/health/ → 200
-□ Verify: https://api.verato.app/api/schema/ui/ → Swagger UI
-```
-
----
-
-### Phase 4 — Intelligence Layer (after AWS deployment + 3 paying design partners)
-
-| Feature | Branch |
+| Item | Detail |
 |---|---|
-| Analytics endpoints — delivery rates, risk summary, commitment volume | `feature/analytics` |
-| Conflict detection — pgvector embeddings + Gemini Flash classification | `feature/conflicts` |
-| Person knowledge graph — graph API endpoint + frontend rendering | `feature/person-graph` |
-| Org calibration — recompile from ExtractionFeedback signals weekly | `feature/calibration` |
-| Teams + Google Meet connectors | `feature/connectors` |
+| `GET /api/v1/auth/invitations/` | List all sent invitations with status (pending / accepted / expired). Already referenced in user stories; endpoint missing. |
+| `POST /api/v1/auth/invitations/{id}/resend/` | Re-send invite email and refresh the 7-day token. |
+| `DELETE /api/v1/auth/invitations/{id}/` | Revoke a pending invitation. |
+| Frontend: Settings → Team tab | Show members table (name, email, role, status) + invite form + resend/revoke actions on pending rows. |
 
-**Screens to generate (in order):**
-1. Sign-up (register / invite / accept-invite)
-2. Dashboard / command centre
-3. Commitment detail
-4. Upload & extraction review
-5. Prior commitments import
-6. Person profile — timeline view (MVP) + graph view (Phase 2)
-7. Settings (Slack OAuth connection, Zoom webhook, org preferences)
+#### Sprint 2 — Meetings commitment count
+
+| Item | Detail |
+|---|---|
+| `commitment_count` on `MeetingSerializer` | Annotate queryset: `Count('commitments')`. Read-only field. |
+| `pending_count` on `MeetingSerializer` | Annotate: `Count('commitments', filter=Q(commitments__status='pending_review'))`. |
+| Frontend: Meetings list | Each row shows `12 commitments · 3 pending review` so CoS can re-open meetings that still need review. |
+
+---
+
+### Phase 3B — Transcript Source Integrations ← NEXT
+
+**Goal:** Ingest transcripts automatically from the tools CoS teams already use — without requiring Zoom cloud recording or Google Meet.
+
+#### tl;dv
+
+- **What it does:** Records and transcribes meetings (Zoom, Google Meet, Teams) as a bot participant. Exports VTT/SRT transcripts.
+- **Integration approach:** tl;dv has a REST API. Poll for new meetings or receive webhook on `meeting.completed`. Download transcript via API token.
+- **New model:** `TldvConnection` (per-org API key + last_synced_at) · `TldvRecording` (status machine, meeting FK)
+- **New Celery task:** `sync_tldv_recordings` — every 15 min, fetch new recordings, create Meeting, queue `process_meeting`
+- **Settings:** Connect via API key (no OAuth — tl;dv uses personal API tokens)
+- **Endpoints:** `GET /tldv/status/` · `POST /tldv/connect/` · `POST /tldv/disconnect/`
+
+#### Granola
+
+- **What it does:** Mac desktop app that captures meeting audio and generates AI notes + transcript. Stores data locally and in cloud.
+- **Integration approach:** Granola has a REST API (beta). Authenticate per-user, poll for new meeting notes, extract transcript text.
+- **New model:** `GranolaConnection` (per-org API key) · `GranolaRecording`
+- **New Celery task:** `sync_granola_recordings` — every 15 min
+- **Endpoints:** `GET /granola/status/` · `POST /granola/connect/` · `POST /granola/disconnect/`
+
+#### Fathom
+
+- **What it does:** Records and transcribes Zoom/Meet/Teams calls. Sends email summaries with action items.
+- **Integration approach:** Fathom has a webhook API. Register webhook endpoint to receive `call.completed` events with transcript URL. Download and process.
+- **New model:** `FathomConnection` (per-org webhook secret + API key) · `FathomRecording`
+- **Webhook endpoint:** `POST /fathom/webhook/` (HMAC verified)
+- **Endpoints:** `GET /fathom/status/` · `POST /fathom/connect/` · `POST /fathom/disconnect/`
+
+---
+
+### Phase 3C — Productivity Tool Integrations
+
+**Goal:** Push confirmed commitments into the tools teams already use for task management and docs.
+
+#### Jira
+
+- **What it does:** Push a confirmed Commitment as a Jira issue; sync status back when issue closes.
+- **Integration approach:** Jira REST API v3. OAuth 2.0 (Atlassian) or API token per org. On commitment confirm → `POST /rest/api/3/issue`. Jira webhook → update commitment status when issue transitions.
+- **New model:** `JiraConnection` (per-org API token + base URL + project key) · `JiraIssueLink` (commitment FK + jira_issue_key)
+- **New endpoint:** `POST /api/v1/commitments/{id}/push-to-jira/`
+- **Webhook:** `POST /api/v1/jira/webhook/` — maps issue status → commitment status
+- **Settings:** Connect via Jira API token + base URL; pick default project
+
+#### Notion AI
+
+- **What it does:** Pull action items / commitments from Notion pages (meeting notes databases); push confirmed commitments back as Notion database rows.
+- **Integration approach:** Notion API (OAuth). Read from a user-selected database; detect action item patterns; create Notion database rows for confirmed commitments.
+- **New model:** `NotionConnection` (per-org OAuth token + workspace) · `NotionPageLink` (meeting FK + notion_page_id)
+- **New Celery task:** `sync_notion_pages` — poll selected Notion database for new meeting note pages, import transcript text, queue `process_meeting`
+- **Settings:** OAuth connect → pick Notion workspace + database to monitor
+- **Endpoints:** `GET /notion/status/` · `GET /notion/oauth/start/` · `GET /notion/oauth/callback/` · `POST /notion/disconnect/`
+
+---
+
+### Phase 4 — Intelligence Layer (after 3 paying design partners)
+
+| Feature | What it unlocks |
+|---|---|
+| Analytics endpoints — delivery rates by person/team/period | `feature/analytics` |
+| Conflict detection — pgvector embeddings + Gemini Flash classification | `feature/conflicts` |
+| Person knowledge graph — graph API + frontend rendering | `feature/person-graph` |
+| Org calibration — recompile from ExtractionFeedback signals weekly | `feature/calibration` |
+| Nudge intelligence — CoS review queue for ambiguous replies | `feature/nudge-intelligence` |
+| Friction detection — cross-functional blockade signals from replies | `feature/friction` |
+| Org health heatmap — departmental delivery rate grid | `feature/org-health` |
+| Executive brief — AI-synthesised strategic pillar summaries | `feature/exec-brief` |
 
 ---
 

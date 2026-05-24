@@ -143,7 +143,19 @@ Any CoS can register their organisation, import their existing tracker, connect 
 - Pre-meeting briefings
 - Org-calibrated extraction recompilation
 
-### Phase 2 — Intelligence Layer (Months 3–6)
+### Phase 2 — Integrations & Team Management (Months 2–4)
+
+| Feature | What it unlocks |
+|---|---|
+| Invitations management — list, resend, revoke | CoS can manage team onboarding without admin workarounds |
+| Meetings commitment count | Meetings list shows commitments per meeting + pending review count |
+| tl;dv integration | Auto-ingest transcripts from tl;dv bot recordings (Zoom/Meet/Teams) |
+| Granola integration | Auto-ingest from Granola Mac app meeting notes |
+| Fathom integration | Auto-ingest via Fathom webhook on call completion |
+| Jira integration | Push confirmed commitments as Jira issues; sync status back |
+| Notion AI integration | Pull action items from Notion meeting note pages; push commitments back |
+
+### Phase 3 — Intelligence Layer (Months 4–8)
 
 | Feature | What it unlocks |
 |---|---|
@@ -153,7 +165,10 @@ Any CoS can register their organisation, import their existing tracker, connect 
 | Accountability analytics | Delivery rate by person, team, time period |
 | Pre-meeting briefing | Open commitments relevant to today's agenda |
 | Org-calibrated extraction | Weekly recompile from ExtractionFeedback signals |
-| Teams + Google Meet connectors | Full multi-platform auto-ingestion |
+| Nudge intelligence — CoS review queue | Ambiguous replies escalated to CoS with Gemini summary |
+| Friction detection | Cross-functional blockades surfaced from nudge replies |
+| Org health heatmap | Departmental delivery rate grid |
+| Executive brief | AI-synthesised strategic pillar summaries |
 
 ### Phase 3 — Platform Layer (Months 6–12)
 
@@ -606,8 +621,12 @@ The aha moment is the first time an owner replies "Done" in Slack and the CoS se
 | Gmail OAuth | Send nudge emails, poll reply threads, Gemini intent parsing | 1 ✓ Built |
 | Google Calendar + Google Drive | Auto-pull Meet transcripts via Drive VTT; sync every 15 min | 1 ✓ Built |
 | Zoom (webhook + OAuth) | Auto-ingest recording when meeting ends; HMAC-verified webhook | 1 ✓ Built |
-| Microsoft Teams | Auto-ingest Teams transcripts | 2 |
-| Jira / Linear | Push commitments as issues; sync status back | 3 |
+| tl;dv | Auto-ingest transcripts via tl;dv API; bot joins Zoom/Meet/Teams | 2 |
+| Granola | Auto-ingest from Granola Mac app via API | 2 |
+| Fathom | Auto-ingest via Fathom webhook on call completion | 2 |
+| Jira | Push confirmed commitments as issues; sync status back via webhook | 2 |
+| Notion AI | Pull action items from Notion meeting pages; push commitments back | 2 |
+| Microsoft Teams | Auto-ingest Teams transcripts | 3 |
 | Workday / BambooHR | Sync person/role data | 3 |
 
 ---
