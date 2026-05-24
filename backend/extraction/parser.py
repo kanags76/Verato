@@ -120,7 +120,7 @@ def parse_extraction_response(text: str) -> dict:
     """
     _empty = {
         "commitments": [], "topics": [], "meeting_type": "other", "summary": "",
-        "participants": [], "clarifications": [],
+        "participants": [], "clarifications": [], "title": "",
     }
 
     if not text or not text.strip():
@@ -143,6 +143,7 @@ def parse_extraction_response(text: str) -> dict:
             "summary":        "",
             "participants":   [],
             "clarifications": [],
+            "title":          "",
         }
 
     if not isinstance(data, dict):
@@ -196,6 +197,8 @@ def parse_extraction_response(text: str) -> dict:
             if question:
                 clarifications.append({"question": question, "context": context})
 
+    suggested_title = str(data.get("meeting_title", "") or "").strip()
+
     return {
         "commitments":    _apply_commitment_defaults(raw_commitments),
         "topics":         topics,
@@ -203,4 +206,5 @@ def parse_extraction_response(text: str) -> dict:
         "summary":        str(summary),
         "participants":   participants,
         "clarifications": clarifications,
+        "title":          suggested_title,
     }

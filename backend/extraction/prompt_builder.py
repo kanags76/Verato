@@ -43,6 +43,9 @@ Return a single JSON object with exactly these top-level keys:
 
 "meeting_summary" — 2-3 sentence plain English summary of the meeting\'s key discussion and decisions
 
+"meeting_title" — a concise 3-8 word title for this meeting inferred from the topics and participants,
+  e.g. "Q2 Board Prep Review" or "EMEA Pricing Kickoff". Omit words like "meeting", "sync", "call".
+
 "participants" — array of strings: the full name of every person who spoke in the transcript,
   in order of first appearance. Include everyone, even if they made no commitments.
   Match to the provided participant list where possible; otherwise use the name as it appears.
@@ -89,6 +92,8 @@ Return a single JSON object with exactly these top-level keys:
 "meeting_topics"  — empty array []
 "meeting_type"    — the string "other"
 "meeting_summary" — empty string ""
+"meeting_title"   — a concise 3-8 word title describing what this document tracks,
+  e.g. "Q2 Planning Action Items" or "Vendor Selection Tracker"
 "clarifications"  — empty array []
 
 Return ONLY valid JSON. No markdown fences. No explanation.
@@ -138,6 +143,9 @@ Return a single JSON object with exactly these top-level keys:
 "meeting_type" — one of: leadership, one_on_one, team, project, board, external, other
 
 "meeting_summary" — 2-3 sentence plain English summary
+
+"meeting_title" — a concise 3-8 word title for this meeting inferred from the topics and participants,
+  e.g. "Q2 Board Prep Review" or "EMEA Pricing Kickoff". Omit words like "meeting", "sync", "call".
 
 "participants" — array of full names of every person who spoke, in order of first appearance.
 

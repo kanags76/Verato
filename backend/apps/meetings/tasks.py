@@ -141,6 +141,8 @@ def process_meeting(self, meeting_id: str):
         _save_topics(meeting, org, result["topics"])
         meeting.meeting_type = result["meeting_type"]
         meeting.summary      = result["summary"]
+        if not meeting.title and result.get("title"):
+            meeting.title = result["title"]
 
         clarifications = result.get("clarifications", [])
         if clarifications:
@@ -154,7 +156,7 @@ def process_meeting(self, meeting_id: str):
                     order=i,
                 )
             meeting.processing_status = Meeting.ProcessingStatus.PENDING_CLARIFICATION
-            meeting.save(update_fields=['processing_status', 'meeting_type', 'summary'])
+            meeting.save(update_fields=['processing_status', 'meeting_type', 'summary', 'title'])
             logger.info(
                 "process_meeting (pass1): %s → %d clarifications needed",
                 meeting_id, len(clarifications),
@@ -164,7 +166,7 @@ def process_meeting(self, meeting_id: str):
             created = _save_commitments(meeting, org, result)
             meeting.processing_status = Meeting.ProcessingStatus.COMPLETE
             meeting.processed_at      = timezone.now()
-            meeting.save(update_fields=['processing_status', 'processed_at', 'meeting_type', 'summary'])
+            meeting.save(update_fields=['processing_status', 'processed_at', 'meeting_type', 'summary', 'title'])
             for participant in meeting.participants.all():
                 _update_person_lineage(participant, meeting.occurred_at)
             logger.info(
@@ -240,12 +242,14 @@ def process_meeting_pass2(self, meeting_id: str):
         _save_topics(meeting, org, result["topics"])
         meeting.meeting_type = result["meeting_type"]
         meeting.summary      = result["summary"]
+        if not meeting.title and result.get("title"):
+            meeting.title = result["title"]
 
         created = _save_commitments(meeting, org, result)
 
         meeting.processing_status = Meeting.ProcessingStatus.COMPLETE
         meeting.processed_at      = timezone.now()
-        meeting.save(update_fields=['processing_status', 'processed_at', 'meeting_type', 'summary'])
+        meeting.save(update_fields=['processing_status', 'processed_at', 'meeting_type', 'summary', 'title'])
 
         for participant in meeting.participants.all():
             _update_person_lineage(participant, meeting.occurred_at)
@@ -316,9 +320,11 @@ def process_import(self, meeting_id: str):
             _save_tags(commitment, org, item.get('tags', []))
             created += 1
 
+        if not meeting.title and result.get("title"):
+            meeting.title = result["title"]
         meeting.processing_status = Meeting.ProcessingStatus.COMPLETE
         meeting.processed_at      = timezone.now()
-        meeting.save(update_fields=['processing_status', 'processed_at'])
+        meeting.save(update_fields=['processing_status', 'processed_at', 'title'])
         logger.info("process_import: %s → %d commitments created", meeting_id, created)
 
     except Exception as exc:

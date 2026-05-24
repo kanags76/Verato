@@ -267,7 +267,7 @@ class MeetingUploadView(APIView):
             transcript = extract_text_from_file(data['file'])
 
         occurred_at = data.get('occurred_at') or timezone.now()
-        title = data.get('title') or f"Meeting {occurred_at.strftime('%-d %b %Y')}"
+        title = data.get('title', '')
         meeting = Meeting.objects.create(
             organisation=org,
             title=title,
@@ -394,7 +394,7 @@ class MeetingImportView(APIView):
 
         meeting = Meeting.objects.create(
             organisation=org,
-            title=data.get('title', 'Prior Commitments Import'),
+            title=data.get('title', ''),
             occurred_at=timezone.now(),
             platform=Meeting.Platform.IMPORT,
             raw_transcript=text,
