@@ -566,104 +566,102 @@ All frontend screens built by Google AI Studio, committed to `frontend/`. Stack:
 
 ---
 
-### Phase 3A — Auth, Legal & Team Management ← NEXT (IMMEDIATE)
+### Phase 3A — Auth, Legal & Team Management
 
-**Goal:** Production-ready auth (OTP, password reset), legal compliance (privacy policy + terms), and full team management before any design partner goes live.
-
----
-
-#### Sprint 1 — Privacy Policy, Terms & User Consent
-
-| Item | Detail |
-|---|---|
-| Privacy Policy page | Static page at `/privacy` — covers data collected, processing, retention, user rights (GDPR-lite). Hosted in frontend. |
-| Terms of Service page | Static page at `/terms` — covers acceptable use, liability, subscription terms. Hosted in frontend. |
-| `User.terms_accepted_at` | New `DateTimeField(null=True)` on User model. Migration required. |
-| Register screen | Add "I agree to the Terms of Service and Privacy Policy" checkbox (required). On submit, backend sets `terms_accepted_at = now()`. |
-| Login screen | Footer links to `/terms` and `/privacy`. |
-| Backend enforcement | `POST /auth/register/` — reject with 400 if `terms_accepted=true` not in payload. Set `terms_accepted_at` on user creation. |
-| Backend enforcement | `GET /auth/me/` — include `terms_accepted_at` in response so frontend can detect users who pre-date the policy and prompt re-acceptance. |
+**Goal:** Production-ready auth (email verification, password reset), legal compliance (privacy policy + terms), and full team management before any design partner goes live.
 
 ---
 
-#### Sprint 2 — Email OTP for Login (Second Factor)
+#### Sprint 1 — Privacy Policy & Terms ✓ PARTIAL
 
-Every login triggers a 6-digit OTP sent to the user's registered email. JWT is only issued after OTP is verified.
+| Item | Status | Detail |
+|---|---|---|
+| Privacy Policy page | ⏳ Frontend only | Managed in Google AI Studio frontend — static page at `/privacy` |
+| Terms of Service page | ⏳ Frontend only | Managed in Google AI Studio frontend — static page at `/terms` |
+| Backend enforcement | ⏸ Deferred | `terms_accepted_at` field not added — frontend handles consent UX |
 
-**New model: `EmailOTP`**
+---
+
+#### Sprint 2 — Email Verification on Registration ✓ DONE
+
+OTP is sent on first registration to verify the email address is real. Login remains direct email+password → JWT.
+
+**Email backend:** Amazon SES via SMTP (`email-smtp.us-east-1.amazonaws.com:587`). `DEFAULT_FROM_EMAIL = support@twocents.ai`. Domain `twocents.ai` verified in SES, production access granted (50k/day limit).
+
+**New model: `EmailOTP`** (migration 0005)
 ```
 id             UUIDField (PK)
 user           ForeignKey(User)
-code           CharField(6) — random 6-digit string
-purpose        CharField — 'login' | 'password_reset'
+code           CharField(6) — secrets.randbelow(1_000_000), zero-padded
+purpose        CharField — 'email_verification' | 'password_reset'
 created_at     DateTimeField(auto_now_add)
 expires_at     DateTimeField — created_at + 10 minutes
 used_at        DateTimeField(null) — set on successful verify
+attempts       IntegerField(default=0) — max 5 before invalidated
 ```
 
-**New flow:**
-
+**Registration flow:**
 ```
-Step 1: POST /auth/token/ {email, password}
-  → verifies password
-  → generates 6-digit OTP, saves EmailOTP(purpose='login', expires_in=10min)
-  → sends OTP email via SendGrid
-  → returns { "otp_required": true, "session_token": "<signed token containing user_id>" }
-  (no JWT issued yet)
+POST /auth/register/ {first_name, last_name, email, password, org_name, plan}
+  → creates User(is_active=False) + Organisation + Person atomically
+  → generates OTP(purpose='email_verification'), sends via SES
+  → returns { verification_required: true, session_token: "<signed, 10-min expiry>" }
 
-Step 2: POST /auth/token/verify-otp/ {session_token, otp}
-  → decodes session_token (django.core.signing, max_age=600s)
-  → validates OTP matches and is not expired or used
-  → marks OTP used_at = now()
-  → returns { access, refresh } JWT tokens (same as current login response)
+POST /auth/verify-email/ {session_token, code}
+  → validates session_token (django.core.signing, salt='email-verify', max_age=600s)
+  → finds inactive user, checks OTP code (max 5 attempts, 10-min expiry)
+  → sets user.is_active=True, marks OTP used_at=now()
+  → returns { access, refresh } JWT tokens
 ```
 
-**Rate limiting:** Max 5 OTP attempts per session_token before it's invalidated. OTP expires in 10 minutes.
+**Inactive user login (auto-redirect):**
+```
+POST /auth/token/ {email, password}
+  → if user is inactive AND password is correct:
+       generates fresh OTP, sends via SES
+       returns { verification_required: true, session_token }
+  → if user is active: returns { access, refresh } JWT tokens normally
+  → if wrong password/unknown: 401
+```
+
+**Resend for stuck users** (login page "Activate your account" link):
+```
+POST /auth/resend-verification/ {email, password}
+  → verifies credentials against inactive account
+  → generates fresh OTP (invalidates previous), sends via SES
+  → returns { verification_required: true, session_token }
+```
+
+**Invited users** (`/auth/invite/accept/`) created with `is_active=True` — no OTP needed (email verified implicitly via invite link).
 
 **Endpoints:**
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/v1/auth/token/` | POST | Now returns `{otp_required: true, session_token}` instead of JWT |
-| `/api/v1/auth/token/verify-otp/` | POST | Validates OTP → returns JWT |
+| `/api/v1/auth/register/` | POST | Create org + user (inactive) → send OTP |
+| `/api/v1/auth/verify-email/` | POST | Validate OTP → activate account → JWT |
+| `/api/v1/auth/resend-verification/` | POST | Re-send OTP for stuck unverified accounts |
+| `/api/v1/auth/token/` | POST | Login — auto-redirects inactive users to OTP flow |
 
 ---
 
-#### Sprint 3 — Forgot Password with Email OTP
-
-Passwordless reset: user enters email → receives OTP → enters OTP → sets new password. No magic links, no temporary passwords.
-
-**Reuses `EmailOTP` model with `purpose='password_reset'`.**
-
-**New flow:**
+#### Sprint 3 — Forgot Password with Email OTP ✓ DONE
 
 ```
-Step 1: POST /auth/password/reset/ {email}
-  → finds user by email (silently succeeds even if email not found — no enumeration)
-  → generates OTP(purpose='password_reset'), sends email
-  → returns { "detail": "If that email is registered, a reset code has been sent." }
+POST /auth/password/reset/ {email}
+  → silent 200 (no enumeration) — sends OTP if email found and active
 
-Step 2: POST /auth/password/reset/confirm/ {email, otp, new_password}
-  → validates OTP for that email (not expired, not used)
-  → validates new_password (min 8 chars)
-  → sets user.password = make_password(new_password)
-  → marks OTP used_at = now()
+POST /auth/password/reset/confirm/ {email, otp, new_password}
+  → validates OTP (max 5 attempts, 10-min expiry)
+  → sets new password (min 8 chars)
   → blacklists all existing refresh tokens for that user
-  → returns { "detail": "Password updated. Please log in." }
+  → returns { detail: "Password reset successful." }
 ```
-
-**Endpoints:**
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/v1/auth/password/reset/` | POST | Send OTP to registered email |
-| `/api/v1/auth/password/reset/confirm/` | POST | Verify OTP + set new password |
-
-**Frontend screens needed:**
-- "Forgot password?" link on Login → email input screen
-- OTP entry screen (6 boxes, auto-advance)
-- New password screen
-- Success → redirect to Login
+| `/api/v1/auth/password/reset/` | POST | Send reset OTP (silent) |
+| `/api/v1/auth/password/reset/confirm/` | POST | Validate OTP + set new password |
 
 ---
 

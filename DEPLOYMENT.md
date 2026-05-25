@@ -199,7 +199,9 @@ Key variables to fill in:
 | `DB_PASSWORD` | Strong password, any value — Postgres runs in Docker |
 | `GEMINI_API_KEY` | From [aistudio.google.com](https://aistudio.google.com) → Get API key |
 | `CORS_ALLOWED_ORIGINS` | Your frontend URL — update when frontend is deployed |
-| `SENDGRID_API_KEY` | Optional — needed for weekly digest emails |
+| `EMAIL_HOST_USER` | SES SMTP username (looks like `AKIA...`) |
+| `EMAIL_HOST_PASSWORD` | SES SMTP password (derived from IAM secret key) |
+| `DEFAULT_FROM_EMAIL` | `support@twocents.ai` (domain must be verified in SES) |
 | `SLACK_*` | Optional — needed for Slack nudges |
 
 ---
@@ -386,6 +388,27 @@ ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker comp
 | `GOOGLE_CALENDAR_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/calendar/oauth/callback/` |
 
 Gmail + Calendar APIs must be enabled in Google Cloud Console. Each org connects via OAuth — tokens stored in `org.settings` (Gmail) or `CalendarConnection` model (Calendar).
+
+#### Amazon SES (transactional email — OTP, invites, digests)
+| Variable | Notes |
+|----------|-------|
+| `EMAIL_HOST` | `email-smtp.us-east-1.amazonaws.com` |
+| `EMAIL_PORT` | `587` |
+| `EMAIL_HOST_USER` | SES SMTP username (`AKIA...`) |
+| `EMAIL_HOST_PASSWORD` | Derived SMTP password (not the IAM secret key — use derivation script) |
+| `DEFAULT_FROM_EMAIL` | `support@twocents.ai` — domain verified in SES, production access granted |
+
+> **Deriving the SMTP password** from an IAM secret access key:
+> ```bash
+> python3 -c "
+> import hmac, hashlib, base64
+> SECRET = input('Secret: ')
+> key = ('AWS4'+SECRET).encode()
+> for v in [b'11111111', b'us-east-1', b'ses', b'aws4_request', b'SendRawEmail']:
+>     key = hmac.new(key, v, hashlib.sha256).digest()
+> print(base64.b64encode(b'\x04'+key).decode())
+> "
+> ```
 
 #### Zoom (per-org OAuth + webhook)
 | Variable | Notes |

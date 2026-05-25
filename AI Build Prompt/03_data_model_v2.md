@@ -1,4 +1,4 @@
-# Verato — Data Model (Current — W15.5)
+# Verato — Data Model (Current — W17)
 
 > **Database:** PostgreSQL 18 (no extensions required for MVP)
 > **ORM:** Django 6.x
@@ -72,9 +72,12 @@ Organisation (plan: individual|team)
     ├── ZoomConnection (W15 — per-org Zoom OAuth)
     │       └── organisation → Organisation (OneToOne)
     │
-    └── ZoomRecording (W15 — one row per Zoom cloud recording)
-            ├── organisation → Organisation
-            └── meeting → Meeting (nullable — set once processed)
+    ├── ZoomRecording (W15 — one row per Zoom cloud recording)
+    │       ├── organisation → Organisation
+    │       └── meeting → Meeting (nullable — set once processed)
+    │
+    └── EmailOTP (W17 — 6-digit codes for email verification + password reset)
+            └── user → User
 
 ── V2 additions (planned, not yet built) ─────────────────────────
     ├── Conflict (commitment_a, commitment_b, type, confidence)
@@ -762,6 +765,9 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `accounts/0001_initial` | Organisation, User, Person |
 | `accounts/0002_person_lineage` | Person.first_seen_at, Person.meeting_count |
 | `accounts/0003_plan_admin_invitation` | Organisation.plan, User.is_org_admin, Invitation model |
+| `accounts/0004_person_email_nullable` | Person.email nullable |
+| `accounts/0005_emailotp` | EmailOTP model + User.terms_accepted_at (W17) |
+| `accounts/0006_emailotp_purpose_update` | Remove terms_accepted_at; update purpose to email_verification \| password_reset (W17) |
 | `meetings/0001_initial` | Meeting, MeetingParticipant |
 | `meetings/0002_meeting_type_summary` | Meeting.meeting_type, Meeting.summary, MeetingTopic |
 | `meetings/0003_meeting_pending_participants_status` | ProcessingStatus.PENDING_PARTICIPANTS choice |
