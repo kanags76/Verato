@@ -134,7 +134,7 @@ class PersonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Person
         fields = [
-            'id', 'name', 'email', 'role',
+            'id', 'organisation', 'name', 'email', 'role',
             'slack_user_id', 'zoom_user_id',
             'delivery_rate', 'avg_days_late', 'total_commitments',
             'first_seen_at', 'meeting_count', 'recent_topics',
@@ -142,7 +142,7 @@ class PersonSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = [
-            'id', 'delivery_rate', 'avg_days_late', 'total_commitments',
+            'id', 'organisation', 'delivery_rate', 'avg_days_late', 'total_commitments',
             'first_seen_at', 'meeting_count', 'recent_topics',
             'is_platform_user', 'created_at',
         ]
