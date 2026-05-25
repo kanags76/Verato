@@ -128,7 +128,8 @@ class MeetingManagerSerializer(serializers.ModelSerializer):
 
 
 class PersonSerializer(serializers.ModelSerializer):
-    recent_topics = serializers.SerializerMethodField()
+    recent_topics      = serializers.SerializerMethodField()
+    is_platform_user   = serializers.SerializerMethodField()
 
     class Meta:
         model = Person
@@ -137,12 +138,17 @@ class PersonSerializer(serializers.ModelSerializer):
             'slack_user_id', 'zoom_user_id',
             'delivery_rate', 'avg_days_late', 'total_commitments',
             'first_seen_at', 'meeting_count', 'recent_topics',
+            'is_platform_user',
             'created_at',
         ]
         read_only_fields = [
             'id', 'delivery_rate', 'avg_days_late', 'total_commitments',
-            'first_seen_at', 'meeting_count', 'recent_topics', 'created_at',
+            'first_seen_at', 'meeting_count', 'recent_topics',
+            'is_platform_user', 'created_at',
         ]
+
+    def get_is_platform_user(self, obj):
+        return obj.user_id is not None
 
     def validate_email(self, value):
         if not value:
