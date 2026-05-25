@@ -665,13 +665,13 @@ POST /auth/password/reset/confirm/ {email, otp, new_password}
 
 ---
 
-#### Sprint 4 — Invitations Management
+#### Sprint 4 — Invitations Management ✓ DONE
 
 | Item | Detail |
 |---|---|
 | `GET /api/v1/auth/invitations/` | List all sent invitations with status (pending / accepted / expired). |
 | `POST /api/v1/auth/invitations/{id}/resend/` | Re-send invite email, refresh 7-day token. |
-| `DELETE /api/v1/auth/invitations/{id}/` | Revoke a pending invitation. |
+| `DELETE /api/v1/auth/invitations/{id}/revoke/` | Revoke a pending invitation. |
 | Frontend: Settings → Team tab | Members table (name, email, role, status) + invite form + resend/revoke on pending rows. |
 
 ---
@@ -683,6 +683,120 @@ POST /auth/password/reset/confirm/ {email, otp, new_password}
 | `commitment_count` on `MeetingSerializer` | `Count('commitments')` annotation. Read-only field. |
 | `pending_count` on `MeetingSerializer` | `Count('commitments', filter=Q(commitments__status='pending_review'))`. |
 | Frontend: Meetings list | Each row shows `12 commitments · 3 pending review`. |
+
+---
+
+#### Sprint 6 — Meeting Ownership & Delegation
+
+**Goal:** Replace the flat "all org users see all meetings" model with a meeting-relative role model. Every meeting has an owner (its CoS). Access is scoped by ownership or accepted delegation. Action owners can see commitments they own without having full CoS access.
+
+---
+
+**Role model design:**
+
+| Role | Who | What they can do |
+|---|---|---|
+| **CoS (meeting owner)** | `meeting.created_by == request.user` | Full CRUD on that meeting and all its commitments |
+| **Delegate** | Accepted `MeetingManager` where `manager_user == request.user` | Same full access as CoS on the managed user's meetings |
+| **Action owner** | `commitment.owner.user == request.user` | See and update their own commitments only; no access to other commitments in the same meeting |
+| **Org admin** | `user.is_org_admin` | All access (existing behaviour preserved for admin operations) |
+
+A user who creates their own meeting becomes its CoS automatically — there is no fixed "CoS role" on the User model.
+
+---
+
+**New field: `Meeting.created_by`**
+
+```python
+created_by = models.ForeignKey(
+    'accounts.User',
+    null=True, blank=True,
+    on_delete=models.SET_NULL,
+    related_name='owned_meetings',
+)
+```
+
+- Added in `meetings/0005_meeting_created_by.py`
+- RunPython backfill: sets `created_by` to the org's first admin user for all existing meetings
+- All new meetings set `created_by = request.user` in the upload/import views
+
+---
+
+**New model: `MeetingManager`** (in `accounts/models.py`)
+
+Two-sided delegation: delegator invites, delegatee must explicitly accept.
+
+```python
+class MeetingManager(models.Model):
+    class Status(models.TextChoices):
+        PENDING  = 'pending',  'Pending'
+        ACCEPTED = 'accepted', 'Accepted'
+        DECLINED = 'declined', 'Declined'
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meeting_managers')
+    manager_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='manages_for')   # gets CoS access
+    managed_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delegated_to')  # whose meetings are shared
+    status       = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    accepted_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table     = 'accounts_meetingmanager'
+        unique_together = [['organisation', 'manager_user', 'managed_user']]
+```
+
+Migration: `accounts/0007_meetingmanager`
+
+---
+
+**Access rules (applied in ViewSet `get_queryset`):**
+
+```python
+# Meetings a user can manage
+def _accessible_meeting_ids(user):
+    """Returns Q filter for meetings this user has full CoS access to."""
+    # Meetings they own directly
+    owned = Q(created_by=user)
+    # Meetings owned by users who have accepted delegation to this user
+    delegated_from = MeetingManager.objects.filter(
+        manager_user=user, status='accepted'
+    ).values_list('managed_user_id', flat=True)
+    delegated = Q(created_by_id__in=delegated_from)
+    return owned | delegated
+
+# Commitments a user can see (CoS access OR own commitment)
+def _accessible_commitment_filter(user):
+    cos_access  = Q(meeting__in=Meeting.objects.filter(_accessible_meeting_ids(user)))
+    own_action  = Q(owner__user=user)
+    return cos_access | own_action
+```
+
+**CommitmentEvent visibility for action owners:**
+- Action owners (not CoS or delegate) who view `/commitments/{id}/history/` receive only events where `actor.user == request.user` — they see their own feedback submissions but NOT CoS actions (confirms, escalations, nudges).
+- CoS and delegates see all events.
+
+---
+
+**New endpoints:**
+
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/api/v1/managers/` | GET | Any user | List all delegations involving the current user (as delegator or delegatee) |
+| `/api/v1/managers/` | POST | Any user | Delegator creates delegation request `{manager_user_id}` |
+| `/api/v1/managers/{id}/accept/` | POST | Delegatee only | Accept a pending delegation |
+| `/api/v1/managers/{id}/` | DELETE | Delegator or delegatee | Revoke (if delegator) or decline (if delegatee) |
+
+**Updated existing endpoints:**
+
+| Endpoint | Change |
+|---|---|
+| `POST /meetings/upload/` | Sets `meeting.created_by = request.user` |
+| `POST /meetings/import/` | Sets `meeting.created_by = request.user` |
+| `GET /meetings/` | Filters to accessible meetings only (owned + delegated) |
+| `GET /commitments/` | Filters to accessible commitments (CoS access OR own action) |
+| `GET /commitments/{id}/history/` | Action owners get filtered history (own events only) |
+| `GET /dashboard/` | Scoped to accessible commitments |
 
 ---
 
@@ -845,6 +959,12 @@ SLACK
   POST   /slack/users/import/       Import selected Slack users as Persons (link or create)
   GET    /slack/users/sync/         Full workspace sync — matched/unmatched Persons vs Slack members
   POST   /slack/users/sync/         Confirm matches {confirmations: [{person_id, slack_user_id}]}
+
+MANAGERS (Delegation)
+  GET    /managers/                 List delegations for current user (as delegator or delegatee)
+  POST   /managers/                 Create delegation request {manager_user_id}
+  POST   /managers/{id}/accept/     Delegatee accepts pending delegation
+  DELETE /managers/{id}/            Delegator revokes OR delegatee declines
 
 NUDGE SETTINGS
   GET    /nudge-settings/           Org nudge schedule {nudge_enabled, first_days_before, second_hours_before}

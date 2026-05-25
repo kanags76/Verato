@@ -1,10 +1,10 @@
-# Verato — Data Model (Current — W17)
+# Verato — Data Model (Current — W18)
 
 > **Database:** PostgreSQL 18 (no extensions required for MVP)
 > **ORM:** Django 6.x
 > **Multi-tenancy:** All models scoped to `Organisation` via FK
 > **Current state:** All models built, migrated, deployed to production
-> **Last updated:** 2026-05-24
+> **Last updated:** 2026-05-25
 
 ---
 
@@ -28,10 +28,15 @@ Organisation (plan: individual|team)
     │
     ├── Invitation (email invite with 7-day token — Week 6.5)
     │
+    ├── MeetingManager (W18 — two-sided delegation; pending/accepted/declined)
+    │       ├── manager_user → User  (gets CoS access to managed_user's meetings)
+    │       └── managed_user → User  (the person who delegated)
+    │
     ├── Person (all meeting participants — may or may not have a User)
     │       └── MeetingParticipant (M2M through table)
     │
     ├── Meeting (one per transcript upload or import session)
+    │       ├── created_by → User (W18 — meeting owner / CoS; nullable; backfilled to org admin)
     │       ├── MeetingParticipant
     │       ├── MeetingTopic (Week 3.5 — thematic topics per meeting)
     │       └── PipelineStatus (Week 9 — proxy model; admin sidebar link only, no extra table)
@@ -251,6 +256,54 @@ class Person(models.Model):
             models.Index(fields=['organisation', 'slack_user_id']),
             models.Index(fields=['organisation', 'first_seen_at']),
         ]
+
+
+class EmailOTP(models.Model):
+    """6-digit codes for email verification (on first registration) and password reset."""
+    class Purpose(models.TextChoices):
+        EMAIL_VERIFICATION = 'email_verification', 'Email Verification'
+        PASSWORD_RESET     = 'password_reset',     'Password Reset'
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    code       = models.CharField(max_length=6)          # secrets.randbelow(1_000_000), zero-padded
+    purpose    = models.CharField(max_length=20, choices=Purpose.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()                   # created_at + 10 minutes
+    used_at    = models.DateTimeField(null=True, blank=True)
+    attempts   = models.IntegerField(default=0)           # max 5 before invalidated
+
+    class Meta:
+        db_table = 'accounts_emailotp'
+        indexes = [
+            models.Index(fields=['user', 'purpose', 'created_at'], name='emailotp_user_purpose_idx'),
+        ]
+
+
+class MeetingManager(models.Model):
+    """
+    Two-sided delegation of meeting management.
+    manager_user gains full CoS access to all meetings owned by managed_user.
+    managed_user (the delegator) creates the record; manager_user must explicitly accept.
+    Status flows: pending → accepted | declined.
+    Either party can delete: delegator revokes, manager_user declines or resigns.
+    """
+    class Status(models.TextChoices):
+        PENDING  = 'pending',  'Pending'
+        ACCEPTED = 'accepted', 'Accepted'
+        DECLINED = 'declined', 'Declined'
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meeting_managers')
+    manager_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='manages_for')
+    managed_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delegated_to')
+    status       = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    accepted_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table        = 'accounts_meetingmanager'
+        unique_together = [['organisation', 'manager_user', 'managed_user']]
 ```
 
 ---
@@ -286,6 +339,10 @@ class Meeting(models.Model):
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meetings')
+    created_by   = models.ForeignKey(                                    # W18 — meeting owner / CoS
+        'accounts.User', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='owned_meetings',
+    )
     title        = models.CharField(max_length=500)
     platform     = models.CharField(max_length=20, choices=Platform.choices, default=Platform.UPLOAD)
     occurred_at  = models.DateTimeField()  # optional on upload — serializer defaults to timezone.now()
@@ -641,7 +698,69 @@ _get_client(org=None):
 
 ---
 
-## 7. Key QuerySet Patterns
+## 7. Role-Based Access Control (W18)
+
+### Role model
+
+Role is **meeting-relative** — not a fixed attribute on the User. There is no "CoS" column; a user becomes CoS for a specific meeting by being its creator.
+
+| Role | Condition | Permissions |
+|---|---|---|
+| **Meeting owner (CoS)** | `meeting.created_by == request.user` | Full CRUD on that meeting and all its commitments and history |
+| **Delegate** | Accepted `MeetingManager` where `manager_user == request.user` | Same full access as CoS on the `managed_user`'s meetings |
+| **Action owner** | `commitment.owner.user == request.user` | Can log an update on their own commitment only; cannot resolve/defer/mark done |
+| **Org admin** | `user.is_org_admin` | Full access across the org (admin operations unchanged) |
+
+### Who can resolve a commitment?
+
+Only the meeting owner (CoS) or an accepted delegate can:
+- Mark a commitment **done** (`POST /commitments/{id}/resolve/`)
+- **Defer** a commitment (`POST /commitments/{id}/resolve/` with `outcome=deferred`)
+- **Cancel**, **escalate**, **confirm**, or **reject** a commitment
+
+An action owner can only:
+- Log an update (`POST /commitments/{id}/log-update/` — submits feedback/status note)
+
+### CommitmentEvent visibility
+
+| Viewer | What they see in `GET /commitments/{id}/history/` |
+|---|---|
+| CoS / delegate | All events — confirms, rejects, nudges, escalations, and action owner updates |
+| Action owner | Only events where `actor.user == request.user` (their own logged updates) |
+
+### CoS notification on action owner update
+
+When an action owner calls `POST /commitments/{id}/log-update/`, the system creates an `InAppNotification` (type: `owner_update`) for the meeting's `created_by` user. This ensures the CoS is alerted to every owner update without having to check manually.
+
+### QuerySet helpers
+
+```python
+def _cos_meeting_q(user):
+    """Q filter: meetings this user owns directly or via accepted delegation."""
+    delegated_from = MeetingManager.objects.filter(
+        manager_user=user, status='accepted'
+    ).values_list('managed_user_id', flat=True)
+    return Q(created_by=user) | Q(created_by_id__in=delegated_from)
+
+
+def _accessible_meetings(user):
+    return Meeting.objects.filter(
+        organisation=user.organisation
+    ).filter(_cos_meeting_q(user))
+
+
+def _accessible_commitments(user):
+    """CoS/delegate access to all commitments in their meetings, OR own action items."""
+    return Commitment.objects.filter(
+        organisation=user.organisation
+    ).filter(
+        Q(meeting__in=_accessible_meetings(user)) | Q(owner__user=user)
+    )
+```
+
+---
+
+## 8. Key QuerySet Patterns
 
 ```python
 # Organisation-scoped base (enforces tenancy on every query)
@@ -650,23 +769,23 @@ class OrgScopedViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(organisation=self.request.user.organisation)
 
 
-# Dashboard summary — single aggregate query
-def get_dashboard_summary(org_id):
+# Dashboard summary — scoped to accessible commitments
+def get_dashboard_summary(user):
     today = date.today()
     active_statuses = ['active', 'at_risk', 'escalated', 'pending_review']
-    return Commitment.objects.filter(
-        organisation_id=org_id, status__in=active_statuses
+    return _accessible_commitments(user).filter(
+        status__in=active_statuses
     ).aggregate(
-        overdue    = Count('id', filter=Q(deadline__lt=today)),
-        at_risk    = Count('id', filter=Q(risk_score__gte=0.7, deadline__gte=today)),
-        on_track   = Count('id', filter=Q(risk_score__lt=0.7)),
+        overdue      = Count('id', filter=Q(deadline__lt=today)),
+        at_risk      = Count('id', filter=Q(risk_score__gte=0.7, deadline__gte=today)),
+        on_track     = Count('id', filter=Q(risk_score__lt=0.7)),
         total_active = Count('id'),
     )
 
 
 # Nudge candidates — commitments due within 48h with Slack, not recently nudged
 def get_nudge_candidates():
-    cutoff       = date.today() + timedelta(hours=48)
+    cutoff         = date.today() + timedelta(hours=48)
     cooldown_after = timezone.now() - timedelta(hours=20)
     return Commitment.objects.filter(
         status__in=['active', 'at_risk'],
@@ -692,7 +811,7 @@ def get_person_timeline(person_id, org_id):
 
 ---
 
-## 8. Extraction Output Schema
+## 9. Extraction Output Schema
 
 Both extraction functions return the same dict format. Keys are normalised by the parser:
 
@@ -723,7 +842,7 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 
 ---
 
-## 9. Full MVP Table List
+## 10. Full MVP Table List
 
 | Table | Notes |
 |---|---|
@@ -731,7 +850,9 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `accounts_user` | CoS + invited users; is_org_admin gates invites |
 | `accounts_invitation` | 7-day tokens; unique_together (org, email) |
 | `accounts_person` | All meeting participants; linked to User via OneToOne |
-| `meetings_meeting` | Transcripts + imports; meeting_type + summary |
+| `accounts_emailotp` | 6-digit OTPs for email verification + password reset (W17) |
+| `accounts_meetingmanager` | Two-sided delegation; pending/accepted/declined (W18) |
+| `meetings_meeting` | Transcripts + imports; meeting_type + summary; created_by FK (W18) |
 | `meetings_meetingparticipant` | Through table for Meeting ↔ Person |
 | `meetings_meetingtopic` | Topics per meeting extracted by Gemini |
 | `commitments_commitmenttag` | Org-scoped tag vocabulary; get_or_create on save |
@@ -742,7 +863,7 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `commitments_commitmentevent` | Append-only audit log; every action + field edit written here |
 | `notifications_nudgelog` | One record per nudge sent per type; tracks Gmail thread IDs |
 | `notifications_gmailpolllog` | One row per Gmail poll run per org |
-| `notifications_inappnotification` | Per-org in-app alerts; types: slack_reply, gmail_reply, meeting_ready, meeting_failed |
+| `notifications_inappnotification` | Per-org in-app alerts; types: slack_reply, gmail_reply, meeting_ready, meeting_failed, owner_update (W18) |
 | `notifications_calendarconnection` | Per-org Google Calendar OAuth tokens (OneToOne) |
 | `notifications_calendarevent` | One row per Google Meet event; status machine; links to Meeting on completion |
 | `notifications_zoomconnection` | Per-org Zoom OAuth tokens (OneToOne) |
@@ -758,7 +879,7 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 
 ---
 
-## 10. Migrations
+## 11. Migrations
 
 | Migration | Contents |
 |---|---|
@@ -768,10 +889,12 @@ Note: Import meetings return `"topics": []`, `"meeting_type": "import"`, `"summa
 | `accounts/0004_person_email_nullable` | Person.email nullable |
 | `accounts/0005_emailotp` | EmailOTP model + User.terms_accepted_at (W17) |
 | `accounts/0006_emailotp_purpose_update` | Remove terms_accepted_at; update purpose to email_verification \| password_reset (W17) |
+| `accounts/0007_meetingmanager` | MeetingManager model (W18) |
 | `meetings/0001_initial` | Meeting, MeetingParticipant |
 | `meetings/0002_meeting_type_summary` | Meeting.meeting_type, Meeting.summary, MeetingTopic |
 | `meetings/0003_meeting_pending_participants_status` | ProcessingStatus.PENDING_PARTICIPANTS choice |
 | `meetings/0004_add_pipelinestatus_proxy` | PipelineStatus proxy model (Week 9 — no new table) |
+| `meetings/0005_meeting_created_by` | Meeting.created_by FK (null=True); RunPython backfill → org admin for existing rows (W18) |
 | `commitments/0001_initial` | Commitment, EscalationEvent, ExtractionFeedback |
 | `commitments/0002_tags` | CommitmentTag, Commitment.tags M2M |
 | `commitments/0003_priority` | Commitment.priority field (high/medium/low) |
@@ -800,4 +923,4 @@ migrations.AddField(model_name='commitment', name='embedding',
 
 ---
 
-*End of document. Phase 1 data model complete — 264 tests passing. Phase 2 additions (embeddings, conflicts, calibration, graph rendering) documented inline.*
+*End of document. W18 data model — meeting ownership + delegation design complete. Phase 2 additions (embeddings, conflicts, calibration, graph rendering) documented inline.*
