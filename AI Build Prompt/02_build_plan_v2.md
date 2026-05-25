@@ -825,6 +825,39 @@ def _accessible_commitment_filter(user):
 
 Committed as `feat(phase3a-sprint6): meeting ownership & delegation` (`5e568e8`).
 
+**Serializer field additions (post-Sprint 6, same session):**
+
+| Serializer | New field | Value |
+|---|---|---|
+| `CommitmentSerializer` | `can_manage` | `true` if current user is CoS / delegate / org admin for this commitment's meeting |
+| `PersonSerializer` | `is_platform_user` | `true` if person has a linked `User` account |
+| `PersonSerializer` | `user_id` | UUID of the linked `User` — pass as `manager_user_id` to `POST /managers/` |
+| `PersonSerializer` | `organisation` | UUID of the person's organisation |
+| `MeetingSerializer` | `created_by_id` | UUID of the meeting owner (`created_by` user) |
+| `MeetingSerializer` | `created_by_name` | Full name or email of the meeting owner |
+
+**Bug fixes (same session):**
+- `POST /commitments/{id}/log-update/` — crashed with 500 when `new_status: null` sent in body (`None.strip()` error). Fixed with `(val or '').strip()`.
+- `log-update` now requires `_has_cos_access` before allowing `new_status` changes — action owners can log text only, not change status.
+- `_serialize_commitment()` now passes `request` context so `can_manage` is correct in all action responses (`confirm`, `reject`, `escalate`, `resolve`, `reopen`).
+
+**Frontend implementation (Sprint 6 UI):**
+
+| Screen / Component | What was built |
+|---|---|
+| `DelegationManagement.tsx` | Add delegate (search platform users, POST /managers/), list pending/accepted delegations, accept/revoke |
+| `Settings.tsx` | Delegation tab wired to DelegationManagement component |
+| `CommitmentDetail.tsx` | Role-aware action buttons — resolve/escalate/reopen/nudge hidden when `can_manage: false`; Log Update form always visible |
+| `MeetingDetail.tsx` | Shows `created_by_name` (meeting owner) in header |
+| `Register.tsx` | Full OTP email verification flow — handles `verification_required` response, OTP entry, session_token |
+| `Login.tsx` | Detects inactive user response, redirects to OTP flow |
+| `ActivateAccount.tsx` | New screen — resend verification for stuck unverified users |
+| `ErrorProvider.tsx` | Global error boundary component |
+| `services.ts` | `managersService` (list, create, accept, revoke), `logUpdate` action |
+| `types.ts` | `MeetingManager` type, `can_manage` on `Commitment` |
+
+Committed as `feat(frontend): Sprint 6 delegation UI + auth flow updates` (`4987bae`).
+
 ---
 
 ### Phase 3B — Transcript Source Integrations ← NEXT

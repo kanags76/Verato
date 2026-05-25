@@ -255,6 +255,32 @@ Acceptance criteria
 - 7-day invite link mentioned in helper copy
 API needs: ✅ POST /api/v1/auth/invite/ · ✅ GET /api/v1/auth/invitations/ (list sent invites) · ✅ POST /api/v1/auth/invitations/{id}/resend/ · ✅ DELETE /api/v1/auth/invitations/{id}/revoke/
 
+## US-6.1b — Delegate meeting management to a colleague ✅
+As a: CoS
+I want to: Give a colleague access to manage my meetings and commitments
+So that: They can act on my behalf when I'm unavailable
+Acceptance criteria
+- Settings → Team tab → Delegation section
+- Search platform users in my org, pick one, send delegation request
+- Pending delegations shown with status — colleague must accept before getting access
+- Accepted delegates appear in a separate list with revoke option
+- Delegate sees a pending request in their own Settings → Team tab and can accept/decline
+- Once accepted: delegate has full CoS access to my meetings (can confirm, resolve, escalate, nudge)
+- Either party can remove the delegation at any time
+API needs: ✅ GET /api/v1/managers/ · ✅ POST /api/v1/managers/ {manager_user_id} · ✅ POST /api/v1/managers/{id}/accept/ · ✅ DELETE /api/v1/managers/{id}/ · ✅ GET /api/v1/persons/?is_platform_user=true (user_id field for manager_user_id)
+
+## US-6.1c — Log an update as an action owner ✅
+As an: Action owner (commitment assignee)
+I want to: Log a status update on a commitment assigned to me
+So that: My CoS knows I'm working on it without needing a Slack nudge
+Acceptance criteria
+- Commitment detail page shows "Log Update" button regardless of role
+- Free-text field to describe current status
+- On submit: CoS receives an in-app notification immediately
+- Update appears in the commitment history timeline
+- Action owner CANNOT mark as done/deferred/cancelled — only CoS can close commitments
+API needs: ✅ POST /api/v1/commitments/{id}/log-update/ {response: "..."} · ✅ InAppNotification(type=owner_update) created for CoS · ✅ can_manage field on CommitmentSerializer gates CoS-only actions
+
 ## US-6.2 — Manage Slack integration post-onboarding
 As an: Admin
 I want to: See whether Slack is connected, test it, and reconnect if needed

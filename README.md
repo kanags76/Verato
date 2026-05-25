@@ -42,8 +42,8 @@ Verato/
 │   └── .env                   (gitignored — never commit)
 ├── frontend/                  React 19 + Vite + TypeScript + Tailwind v4
 │   ├── src/
-│   │   ├── screens/           Dashboard, CommitmentDetail, Meetings, MeetingDetail, People, Settings, Login, Register
-│   │   ├── components/        UploadModal, ClarificationModal, LinkSlackPeopleModal, layout/, ui/
+│   │   ├── screens/           Dashboard, CommitmentDetail, Meetings, MeetingDetail, People, Settings, Login, Register, ActivateAccount
+│   │   ├── components/        UploadModal, ClarificationModal, LinkSlackPeopleModal, DelegationManagement, ErrorProvider, layout/, ui/
 │   │   ├── contexts/          AuthContext (JWT + silent refresh)
 │   │   └── lib/
 │   │       ├── api/           client.ts (Axios), services.ts, auth.ts
@@ -180,6 +180,7 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/managers/` | POST | Create delegation request `{manager_user_id}` — current user is delegator |
 | `/api/v1/managers/{id}/accept/` | POST | Delegatee accepts a pending delegation |
 | `/api/v1/managers/{id}/` | DELETE | Revoke (delegator) or decline (delegatee) a delegation |
+| `/api/v1/managers/{id}/accept/` | POST | Delegatee accepts a pending delegation |
 | **Persons** | | |
 | `/api/v1/persons/` | GET/POST | List or create persons |
 | `/api/v1/persons/{id}/` | GET/PATCH | Detail / update name, email, role |
@@ -283,6 +284,7 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W17 | Phase 3A Sprint 1–2: Privacy/Terms pages, email verification on registration (SES OTP) | ✓ Done |
 | W17.5 | Phase 3A Sprint 3–4: Forgot-password OTP flow, invitation resend/revoke | ✓ Done |
 | W18 | Phase 3A Sprint 5–6: Meetings commitment count, meeting ownership & delegation | ✓ Done |
+| W18.5 | Sprint 6 frontend: delegation UI, role-aware commitment actions, OTP registration flow, ActivateAccount screen | ✓ Done |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
