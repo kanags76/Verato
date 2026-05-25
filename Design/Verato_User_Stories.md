@@ -253,7 +253,7 @@ Acceptance criteria
 - "Send invite" sends and shows "Sent ✓" success state
 - Invitee appears in members list as PENDING until they accept
 - 7-day invite link mentioned in helper copy
-API needs: ✅ POST /api/v1/auth/invite/ · ✅ GET /api/v1/auth/invitations/ (list sent invites) · 🆕 resend / revoke endpoints
+API needs: ✅ POST /api/v1/auth/invite/ · ✅ GET /api/v1/auth/invitations/ (list sent invites) · ✅ POST /api/v1/auth/invitations/{id}/resend/ · ✅ DELETE /api/v1/auth/invitations/{id}/revoke/
 
 ## US-6.2 — Manage Slack integration post-onboarding
 As an: Admin
@@ -400,25 +400,27 @@ So that: I know what I'm agreeing to and the product has legal cover
 Acceptance criteria
 - Register screen has a required checkbox: "I agree to the Terms of Service and Privacy Policy" with hyperlinked terms
 - Checkbox must be checked to enable the Create Account button
-- Backend rejects registration with 400 if `terms_accepted=true` not in payload
-- `terms_accepted_at` timestamp saved on the User record
+- Backend enforcement deferred — `terms_accepted_at` field not added to User model
+- Frontend handles consent UX; static `/terms` and `/privacy` pages exist
 - Static `/terms` and `/privacy` pages exist in the frontend
-API needs: 🆕 `terms_accepted` field on `POST /auth/register/` · 🆕 `User.terms_accepted_at` field · 🆕 `/terms` and `/privacy` static pages
+API needs: ✅ `/terms` and `/privacy` static pages (frontend) · ⏸ `terms_accepted` payload + `User.terms_accepted_at` deferred (frontend enforces consent)
 
-## US-9.2 — Verify my email with a one-time code when I log in
-As a: CoS logging in
-I want to: Confirm my identity with a 6-digit code sent to my email after entering my password
-So that: My org's data is protected even if my password is compromised
+## US-9.2 — Verify my email on registration ✅
+As a: New user registering
+I want to: Verify my email address with a 6-digit code before I can log in
+So that: Only real email addresses can create accounts
 Acceptance criteria
-- After correct email + password, a 6-digit OTP is sent to the registered email
-- Login screen advances to an OTP entry screen (6 input boxes, auto-advance between digits)
-- OTP expires in 10 minutes — expired code shows clear error with "Resend code" option
-- Max 5 wrong attempts before session is invalidated
-- Correct OTP → JWT issued, user lands on Dashboard
-- Email subject: "Your Verato login code" — plain, no branding noise
-API needs: 🆕 `POST /auth/token/` now returns `{otp_required: true, session_token}` · 🆕 `POST /auth/token/verify-otp/ {session_token, otp}` → JWT
+- OTP is sent on **first registration only** — login is direct email+password thereafter
+- Registration creates `User(is_active=False)` + sends 6-digit OTP via Amazon SES
+- Registration returns `{verification_required: true, session_token}` (not JWT)
+- OTP entry screen: 6-digit code, expires in 10 minutes, max 5 wrong attempts
+- Correct OTP → `user.is_active=True` + JWT issued, user lands on Dashboard
+- "Activate your account" resend flow for stuck unverified users via `POST /auth/resend-verification/`
+- Inactive user login auto-redirects to OTP flow with a fresh code (password is still verified first)
+- Invited users accepted via invite link are created `is_active=True` — no OTP needed
+API needs: ✅ `POST /auth/register/` returns `{verification_required, session_token}` · ✅ `POST /auth/verify-email/ {session_token, code}` → JWT · ✅ `POST /auth/resend-verification/ {email, password}` · ✅ `POST /auth/token/` auto-redirects inactive users
 
-## US-9.3 — Reset my password when I've forgotten it
+## US-9.3 — Reset my password when I've forgotten it ✅
 As a: User who has forgotten their password
 I want to: Reset my password using a code sent to my email
 So that: I can regain access without contacting support
@@ -426,11 +428,11 @@ Acceptance criteria
 - "Forgot password?" link on Login screen
 - Email input screen: enter registered email, click "Send reset code"
 - Response is always the same message regardless of whether email exists (prevents enumeration)
-- OTP entry screen — same 6-box design as login OTP
+- OTP entry screen — same 6-box design as registration OTP
 - After correct OTP: new password screen (min 8 chars, confirm field)
-- On success: all existing sessions invalidated, redirect to Login with "Password updated" message
-- OTP expires in 10 minutes and is single-use
-API needs: 🆕 `POST /auth/password/reset/ {email}` · 🆕 `POST /auth/password/reset/confirm/ {email, otp, new_password}`
+- On success: all existing refresh tokens blacklisted, redirect to Login with "Password updated" message
+- OTP expires in 10 minutes and is single-use (max 5 attempts)
+API needs: ✅ `POST /auth/password/reset/ {email}` (silent 200 — no enumeration) · ✅ `POST /auth/password/reset/confirm/ {email, otp, new_password}` (blacklists all refresh tokens on success)
 
 ## US-9.4 — Read the Privacy Policy and Terms at any time
 As a: User

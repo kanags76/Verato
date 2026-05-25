@@ -14,7 +14,7 @@ Accountability layer for organisations. Extracts every commitment made in meetin
 Verato/
 ├── backend/                   Django project
 │   ├── apps/
-│   │   ├── accounts/          Organisation, User (is_org_admin), Person, Invitation
+│   │   ├── accounts/          Organisation, User (is_org_admin), Person, Invitation, MeetingManager
 │   │   ├── meetings/          Meeting, MeetingParticipant, MeetingTopic
 │   │   ├── commitments/       Commitment, CommitmentTag, EscalationEvent, CommitmentEvent, risk.py
 │   │   ├── notifications/     Slack nudges, Gmail OAuth, Google Calendar, Zoom, NudgeLog, GmailPollLog, CalendarConnection, CalendarEvent, ZoomConnection, ZoomRecording, InAppNotification, weekly digest
@@ -140,6 +140,8 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/auth/invite/validate/` | GET | `?token=` — validate invite token |
 | `/api/v1/auth/invite/accept/` | POST | Accept invite, create account → JWT |
 | `/api/v1/auth/invitations/` | GET | List all sent invitations (admin only) |
+| `/api/v1/auth/invitations/{id}/resend/` | POST | Re-send invite email, refresh 7-day token |
+| `/api/v1/auth/invitations/{id}/revoke/` | DELETE | Revoke a pending invitation |
 | `/api/v1/auth/token/` | POST | Login with email + password → JWT |
 | `/api/v1/auth/token/refresh/` | POST | Refresh JWT |
 | `/api/v1/auth/logout/` | POST | Blacklist refresh token |
@@ -173,6 +175,11 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/commitments/{id}/history/` | GET | Full audit log — newest first |
 | **Tags** | | |
 | `/api/v1/tags/` | GET | Tag autocomplete ranked by usage; `?q=` prefix filter |
+| **Delegation** | | |
+| `/api/v1/managers/` | GET | List delegations involving current user (as delegator or delegatee) |
+| `/api/v1/managers/` | POST | Create delegation request `{manager_user_id}` — current user is delegator |
+| `/api/v1/managers/{id}/accept/` | POST | Delegatee accepts a pending delegation |
+| `/api/v1/managers/{id}/` | DELETE | Revoke (delegator) or decline (delegatee) a delegation |
 | **Persons** | | |
 | `/api/v1/persons/` | GET/POST | List or create persons |
 | `/api/v1/persons/{id}/` | GET/PATCH | Detail / update name, email, role |
@@ -273,6 +280,9 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W15 | Zoom OAuth + webhook + recording transcript pipeline — ZoomConnection, ZoomRecording, fetch task, admin | ✓ Done |
 | W15.5 | Slack user management — workspace search, import, full workspace sync | ✓ Done |
 | W16 | Frontend: Zoom + Calendar settings cards, notification bell, all screens complete | ✓ Done |
+| W17 | Phase 3A Sprint 1–2: Privacy/Terms pages, email verification on registration (SES OTP) | ✓ Done |
+| W17.5 | Phase 3A Sprint 3–4: Forgot-password OTP flow, invitation resend/revoke | ✓ Done |
+| W18 | Phase 3A Sprint 5–6: Meetings commitment count, meeting ownership & delegation | ✓ Done |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
@@ -282,7 +292,8 @@ PHASE 2.6 — Nudge engine + Gmail      ✓ COMPLETE
 PHASE 2.7 — In-app notifications      ✓ COMPLETE
 PHASE 2.8 — Passive ingestion         ✓ COMPLETE (Google Meet + Zoom auto-processing)
 PHASE 2.9 — Frontend integrations UI  ✓ COMPLETE (Calendar + Zoom cards, notification bell)
-PHASE 3 — Design partner onboarding   ← Next
+PHASE 3A — Auth, Legal & Team Mgmt    ✓ COMPLETE (email verify, password reset, invitations, ownership)
+PHASE 3B — Transcript Sources         ← Next (tl;dv, Granola, Fathom)
 ```
 
 ---
@@ -304,8 +315,11 @@ PHASE 3 — Design partner onboarding   ← Next
 | `SLACK_CLIENT_ID` | Slack OAuth app |
 | `SLACK_CLIENT_SECRET` | Slack OAuth app |
 | `SLACK_OAUTH_REDIRECT_URI` | `/api/v1/slack/oauth/callback/` |
-| `SENDGRID_API_KEY` | Weekly digest email |
-| `DEFAULT_FROM_EMAIL` | `noreply@verato.app` |
+| `EMAIL_HOST` | `email-smtp.us-east-1.amazonaws.com` |
+| `EMAIL_PORT` | `587` |
+| `EMAIL_HOST_USER` | AWS SES SMTP username |
+| `EMAIL_HOST_PASSWORD` | AWS SES SMTP password |
+| `DEFAULT_FROM_EMAIL` | `support@twocents.ai` (domain verified in SES) |
 | `GOOGLE_CLIENT_ID` | Google Cloud OAuth 2.0 client |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud OAuth 2.0 client |
 | `GOOGLE_GMAIL_REDIRECT_URI` | `/api/v1/gmail/oauth/callback/` |

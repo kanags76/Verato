@@ -676,7 +676,7 @@ POST /auth/password/reset/confirm/ {email, otp, new_password}
 
 ---
 
-#### Sprint 5 — Meetings Commitment Count
+#### Sprint 5 — Meetings Commitment Count ✓ DONE
 
 | Item | Detail |
 |---|---|
@@ -684,9 +684,11 @@ POST /auth/password/reset/confirm/ {email, otp, new_password}
 | `pending_count` on `MeetingSerializer` | `Count('commitments', filter=Q(commitments__status='pending_review'))`. |
 | Frontend: Meetings list | Each row shows `12 commitments · 3 pending review`. |
 
+Both fields are implemented in `meetings/serializers.py` via `SerializerMethodField` on `MeetingSerializer`.
+
 ---
 
-#### Sprint 6 — Meeting Ownership & Delegation
+#### Sprint 6 — Meeting Ownership & Delegation ✓ DONE
 
 **Goal:** Replace the flat "all org users see all meetings" model with a meeting-relative role model. Every meeting has an owner (its CoS). Access is scoped by ownership or accepted delegation. Action owners can see commitments they own without having full CoS access.
 
@@ -797,6 +799,31 @@ def _accessible_commitment_filter(user):
 | `GET /commitments/` | Filters to accessible commitments (CoS access OR own action) |
 | `GET /commitments/{id}/history/` | Action owners get filtered history (own events only) |
 | `GET /dashboard/` | Scoped to accessible commitments |
+
+**Action owner constraints:**
+- Action owners can call `POST /commitments/{id}/log-update/` — writes a `CommitmentEvent` and triggers an in-app notification to the CoS.
+- Action owners **cannot** call `confirm/`, `reject/`, `escalate/`, `resolve/`, or `reopen/` — all return 403.
+- CoS sees all events in `/history/`; action owners see only events where `actor == themselves`.
+
+**Notification on owner update:**
+- `_notify_cos_of_owner_update(commitment, actor)` creates `InAppNotification(type=OWNER_UPDATE)` for the meeting's CoS whenever an action owner logs an update.
+- Skips notification if the actor IS the CoS (prevents self-noise) or is an accepted delegate.
+- `InAppNotification.Type.OWNER_UPDATE` added alongside existing `slack_reply`, `gmail_reply`, `meeting_ready`, `meeting_failed` types (migration `notifications/0010_inappnotification_owner_update`).
+
+**Implementation files changed:**
+- `accounts/models.py` — `MeetingManager` model
+- `accounts/serializers.py` — `MeetingManagerSerializer`
+- `accounts/views.py` — `MeetingManagerViewSet` (list, create, accept action, destroy)
+- `accounts/urls.py` — router registration
+- `accounts/admin.py` — `MeetingManagerAdmin`
+- `meetings/models.py` — `created_by` FK on `Meeting`
+- `meetings/views.py` — `_accessible_meeting_q()` helper + updated `get_queryset` + `created_by=request.user` in upload/import
+- `commitments/views.py` — `_has_cos_access()` + `_notify_cos_of_owner_update()` + role-scoped queryset + 403 guards on status mutations + `history()` scoping
+- `analytics/views.py` — role-scoped `DashboardView`
+- `notifications/models.py` — `OWNER_UPDATE` notification type
+- Migrations: `accounts/0007_meetingmanager`, `meetings/0007_meeting_created_by`, `notifications/0010_inappnotification_owner_update`
+
+Committed as `feat(phase3a-sprint6): meeting ownership & delegation` (`5e568e8`).
 
 ---
 

@@ -17,15 +17,16 @@ from apps.meetings.models import Meeting
 from apps.notifications.models import InAppNotification
 
 
-def _serialize_commitment(commitment):
+def _serialize_commitment(commitment, request=None):
     """Re-fetch with prefetches so action responses include freshly-written related objects."""
     fresh = (
         Commitment.objects
-        .select_related('owner', 'meeting')
+        .select_related('owner', 'meeting__created_by')
         .prefetch_related('tags', 'escalations')
         .get(pk=commitment.pk)
     )
-    return CommitmentSerializer(fresh).data
+    context = {'request': request} if request else {}
+    return CommitmentSerializer(fresh, context=context).data
 
 
 def _get_actor(request):
@@ -240,7 +241,7 @@ class CommitmentViewSet(
         )
         _log(commitment, CommitmentEvent.EventType.CONFIRMED, _get_actor(request),
              new_value={'status': 'active'})
-        return Response(_serialize_commitment(commitment))
+        return Response(_serialize_commitment(commitment, request))
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
@@ -267,7 +268,7 @@ class CommitmentViewSet(
         _log(commitment, CommitmentEvent.EventType.REJECTED, _get_actor(request),
              new_value={'status': 'cancelled'},
              note=request.data.get('note', ''))
-        return Response(_serialize_commitment(commitment))
+        return Response(_serialize_commitment(commitment, request))
 
     @action(detail=True, methods=['post'])
     def escalate(self, request, pk=None):
@@ -294,7 +295,7 @@ class CommitmentViewSet(
         _log(commitment, CommitmentEvent.EventType.ESCALATED, _get_actor(request),
              new_value={'status': 'escalated'},
              note=request.data.get('message', ''))
-        return Response(_serialize_commitment(commitment))
+        return Response(_serialize_commitment(commitment, request))
 
     @action(detail=False, methods=['post'], url_path='bulk-confirm')
     def bulk_confirm(self, request):
@@ -401,22 +402,27 @@ class CommitmentViewSet(
 
     @action(detail=True, methods=['post'], url_path='log-update')
     def log_update(self, request, pk=None):
-        commitment = self.get_object()
-        response_text = request.data.get('response', '').strip()
-        new_status    = request.data.get('new_status', '').strip()
+        commitment    = self.get_object()
+        response_text = (request.data.get('response') or '').strip()
+        new_status    = (request.data.get('new_status') or '').strip()
 
         if not response_text:
             return Response({'detail': 'response is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        valid_statuses = {
-            'active':    Commitment.Status.ACTIVE,
-            'deferred':  Commitment.Status.DEFERRED,
-            'done':      Commitment.Status.DELIVERED,
-            'cancelled': Commitment.Status.CANCELLED,
-        }
-
         old_status = commitment.status
         if new_status:
+            # Only CoS / delegate / org admin can change status — action owners log text only.
+            if not _has_cos_access(request.user, commitment.meeting):
+                return Response(
+                    {'detail': 'Only the meeting owner or a delegate can change commitment status.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            valid_statuses = {
+                'active':    Commitment.Status.ACTIVE,
+                'deferred':  Commitment.Status.DEFERRED,
+                'done':      Commitment.Status.DELIVERED,
+                'cancelled': Commitment.Status.CANCELLED,
+            }
             if new_status not in valid_statuses:
                 return Response(
                     {'detail': f'new_status must be one of: {", ".join(valid_statuses)}.'},
@@ -491,7 +497,7 @@ class CommitmentViewSet(
                  'deadline': str(new_deadline) if new_deadline else None,
              },
              note=data.get('note', ''))
-        return Response(_serialize_commitment(commitment))
+        return Response(_serialize_commitment(commitment, request))
 
     @action(detail=True, methods=['post'])
     def reopen(self, request, pk=None):
@@ -516,7 +522,7 @@ class CommitmentViewSet(
         commitment.save(update_fields=['status', 'resolved_at', 'updated_at'])
         _log(commitment, CommitmentEvent.EventType.REOPENED, _get_actor(request),
              new_value={'status': 'active'})
-        return Response(_serialize_commitment(commitment))
+        return Response(_serialize_commitment(commitment, request))
 
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):

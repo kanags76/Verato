@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Commitment, CommitmentTag, CommitmentEvent, EscalationEvent, ExtractionFeedback
+from apps.accounts.models import MeetingManager
 
 
 class TagsField(serializers.Field):
@@ -48,13 +49,14 @@ class ExtractionFeedbackSerializer(serializers.ModelSerializer):
 
 
 class CommitmentSerializer(serializers.ModelSerializer):
-    owner_name        = serializers.SerializerMethodField()
-    meeting_title     = serializers.SerializerMethodField()
-    is_overdue        = serializers.SerializerMethodField()
+    owner_name         = serializers.SerializerMethodField()
+    meeting_title      = serializers.SerializerMethodField()
+    is_overdue         = serializers.SerializerMethodField()
     needs_manual_nudge = serializers.SerializerMethodField()
-    urgency           = serializers.SerializerMethodField()
-    tags              = TagsField(required=False)
-    escalations       = EscalationEventSerializer(many=True, read_only=True)
+    urgency            = serializers.SerializerMethodField()
+    can_manage         = serializers.SerializerMethodField()
+    tags               = TagsField(required=False)
+    escalations        = EscalationEventSerializer(many=True, read_only=True)
 
     class Meta:
         model = Commitment
@@ -67,6 +69,7 @@ class CommitmentSerializer(serializers.ModelSerializer):
             'priority',
             'status', 'risk_score', 'is_overdue',
             'needs_manual_nudge', 'urgency',
+            'can_manage',
             'reviewed_at', 'resolved_at', 'resolution_note',
             'escalations',
             'created_at', 'updated_at',
@@ -79,6 +82,24 @@ class CommitmentSerializer(serializers.ModelSerializer):
 
     def get_owner_name(self, obj):
         return obj.owner.name if obj.owner else None
+
+    def get_can_manage(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return False
+        user = request.user
+        if user.is_org_admin:
+            return True
+        meeting = obj.meeting
+        if not meeting or not meeting.created_by_id:
+            return user.is_org_admin
+        if meeting.created_by_id == user.pk:
+            return True
+        return MeetingManager.objects.filter(
+            manager_user=user,
+            managed_user_id=meeting.created_by_id,
+            status=MeetingManager.Status.ACCEPTED,
+        ).exists()
 
     def get_meeting_title(self, obj):
         return obj.meeting.title if obj.meeting_id else None
