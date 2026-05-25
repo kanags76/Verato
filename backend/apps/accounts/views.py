@@ -20,7 +20,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.commitments.models import Commitment
 
-from .models import EmailOTP, Invitation, Organisation, Person, User
+from .models import EmailOTP, Invitation, MeetingManager, Organisation, Person, User
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .serializers import (
@@ -28,6 +28,7 @@ from .serializers import (
     EmailTokenObtainPairSerializer,
     InviteSerializer,
     LinkSlackSerializer,
+    MeetingManagerSerializer,
     MergePersonsSerializer,
     OrgSettingsSerializer,
     PersonSerializer,
@@ -893,3 +894,89 @@ def _send_invite_email(invite):
     except Exception as exc:
         logger.error("Failed to send invite email to %s: %s", invite.email, exc)
         raise
+
+
+# ── Meeting Delegation ────────────────────────────────────────────────────────
+
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
+
+
+@extend_schema_view(
+    list=extend_schema(tags=['managers'], summary='List delegations involving the current user'),
+    create=extend_schema(tags=['managers'], summary='Delegate your meetings to another user (they must accept)'),
+    destroy=extend_schema(tags=['managers'], summary='Revoke delegation (delegator) or decline/resign (manager)'),
+    accept=extend_schema(tags=['managers'], summary='Accept a pending delegation request'),
+)
+class MeetingManagerViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class   = MeetingManagerSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names  = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        org  = user.organisation
+        if org is None:
+            return MeetingManager.objects.none()
+        return (
+            MeetingManager.objects
+            .filter(organisation=org)
+            .filter(Q(manager_user=user) | Q(managed_user=user))
+            .select_related('manager_user', 'managed_user', 'organisation')
+        )
+
+    def create(self, request, *args, **kwargs):
+        """Current user (managed_user / delegator) delegates their meetings to manager_user_id."""
+        org = request.user.organisation
+        if org is None:
+            return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        manager_user_id = request.data.get('manager_user_id')
+        if not manager_user_id:
+            return Response({'detail': 'manager_user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            manager_user = User.objects.get(pk=manager_user_id, organisation=org)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found in your organisation.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if manager_user == request.user:
+            return Response({'detail': 'Cannot delegate to yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        obj, created = MeetingManager.objects.get_or_create(
+            organisation=org,
+            manager_user=manager_user,
+            managed_user=request.user,
+            defaults={'status': MeetingManager.Status.PENDING},
+        )
+        http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(MeetingManagerSerializer(obj).data, status=http_status)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        """Delegatee (manager_user) accepts a pending delegation."""
+        org = request.user.organisation
+        obj = get_object_or_404(MeetingManager, pk=pk, manager_user=request.user, organisation=org)
+        if obj.status != MeetingManager.Status.PENDING:
+            return Response(
+                {'detail': f'Cannot accept a delegation with status {obj.status!r}.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        obj.status      = MeetingManager.Status.ACCEPTED
+        obj.accepted_at = timezone.now()
+        obj.save(update_fields=['status', 'accepted_at'])
+        return Response(MeetingManagerSerializer(obj).data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delegator revokes OR manager_user declines/resigns — either party can delete."""
+        org = request.user.organisation
+        obj = get_object_or_404(MeetingManager, pk=kwargs['pk'], organisation=org)
+        if obj.manager_user != request.user and obj.managed_user != request.user:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

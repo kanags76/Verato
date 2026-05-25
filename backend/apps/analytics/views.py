@@ -6,8 +6,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
-from apps.commitments.models import Commitment
+from apps.accounts.models import MeetingManager
 from apps.accounts.views import get_user_org
+from apps.commitments.models import Commitment
+from apps.meetings.models import Meeting
 
 
 class DashboardView(APIView):
@@ -27,7 +29,8 @@ class DashboardView(APIView):
         }},
     )
     def get(self, request):
-        org = get_user_org(request)
+        org  = get_user_org(request)
+        user = request.user
         if org is None:
             return Response({'overdue': 0, 'at_risk': 0, 'on_track': 0, 'total_active': 0})
 
@@ -39,10 +42,28 @@ class DashboardView(APIView):
             Commitment.Status.PENDING_REVIEW,
         ]
 
-        summary = Commitment.objects.filter(
-            organisation=org,
-            status__in=active_statuses,
-        ).aggregate(
+        if user.is_org_admin:
+            base_qs = Commitment.objects.filter(organisation=org, status__in=active_statuses)
+        else:
+            delegated_from = MeetingManager.objects.filter(
+                manager_user=user, status=MeetingManager.Status.ACCEPTED,
+            ).values_list('managed_user_id', flat=True)
+            cos_meeting_ids = Meeting.objects.filter(
+                organisation=org,
+            ).filter(
+                Q(created_by=user) | Q(created_by_id__in=delegated_from)
+            ).values_list('id', flat=True)
+            actor = getattr(user, 'person', None)
+            if actor:
+                base_qs = Commitment.objects.filter(
+                    organisation=org, status__in=active_statuses,
+                ).filter(Q(meeting_id__in=cos_meeting_ids) | Q(owner=actor))
+            else:
+                base_qs = Commitment.objects.filter(
+                    organisation=org, status__in=active_statuses, meeting_id__in=cos_meeting_ids,
+                )
+
+        summary = base_qs.aggregate(
             overdue=Count('id', filter=Q(deadline__lt=today)),
             at_risk=Count('id', filter=Q(risk_score__gte=0.7, deadline__gte=today)),
             on_track=Count('id', filter=Q(risk_score__lt=0.7, deadline__gte=today) | Q(deadline__isnull=True)),

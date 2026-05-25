@@ -1,7 +1,7 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Organisation, Person, Invitation
+from .models import MeetingManager, Organisation, Person, Invitation
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -101,6 +101,30 @@ class OrgSettingsSerializer(serializers.Serializer):
         required=False, choices=['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
     )
     digest_hour          = serializers.IntegerField(required=False, min_value=0, max_value=23)
+
+
+class MeetingManagerSerializer(serializers.ModelSerializer):
+    manager_user_name = serializers.SerializerMethodField()
+    managed_user_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = MeetingManager
+        fields = [
+            'id', 'organisation',
+            'manager_user', 'manager_user_name',
+            'managed_user', 'managed_user_name',
+            'status', 'created_at', 'accepted_at',
+        ]
+        read_only_fields = [
+            'id', 'organisation', 'status', 'created_at', 'accepted_at',
+            'manager_user_name', 'managed_user_name',
+        ]
+
+    def get_manager_user_name(self, obj):
+        return obj.manager_user.get_full_name() or obj.manager_user.email
+
+    def get_managed_user_name(self, obj):
+        return obj.managed_user.get_full_name() or obj.managed_user.email
 
 
 class PersonSerializer(serializers.ModelSerializer):

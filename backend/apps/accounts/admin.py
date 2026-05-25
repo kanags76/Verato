@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import mark_safe
-from .models import Invitation, Organisation, Person, User
+from .models import Invitation, MeetingManager, Organisation, Person, User
 
 
 class OrganisationAdminForm(forms.ModelForm):
@@ -158,3 +158,11 @@ class InvitationAdmin(admin.ModelAdmin):
     list_filter     = ['organisation']
     search_fields   = ['email']
     readonly_fields = ['token', 'created_at']
+
+
+@admin.register(MeetingManager)
+class MeetingManagerAdmin(admin.ModelAdmin):
+    list_display    = ['managed_user', 'manager_user', 'organisation', 'status', 'created_at', 'accepted_at']
+    list_filter     = ['organisation', 'status']
+    search_fields   = ['manager_user__email', 'manager_user__first_name', 'managed_user__email', 'managed_user__first_name']
+    readonly_fields = ['created_at', 'accepted_at']

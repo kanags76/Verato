@@ -1,4 +1,5 @@
 import uuid
+from django.conf import settings
 from django.db import models
 from apps.accounts.models import Organisation, Person
 
@@ -36,6 +37,12 @@ class Meeting(models.Model):
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meetings')
+    created_by   = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='owned_meetings',
+    )
     title        = models.CharField(max_length=500)
     platform     = models.CharField(max_length=20, choices=Platform.choices, default=Platform.UPLOAD)
     occurred_at  = models.DateTimeField()

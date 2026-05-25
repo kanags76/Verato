@@ -11,7 +11,10 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import Commitment, CommitmentEvent, CommitmentTag, EscalationEvent, ExtractionFeedback
 from .serializers import CommitmentSerializer, CommitmentEventSerializer, ResolveSerializer
+from apps.accounts.models import MeetingManager
 from apps.accounts.views import get_user_org
+from apps.meetings.models import Meeting
+from apps.notifications.models import InAppNotification
 
 
 def _serialize_commitment(commitment):
@@ -38,6 +41,45 @@ def _log(commitment, event_type, actor, old_value=None, new_value=None, note='')
         old_value=old_value,
         new_value=new_value,
         note=note,
+    )
+
+
+def _has_cos_access(user, meeting):
+    """True if user is the meeting owner, an accepted delegate, or an org admin."""
+    if user.is_org_admin:
+        return True
+    if not meeting.created_by_id:
+        return user.is_org_admin
+    if meeting.created_by_id == user.pk:
+        return True
+    return MeetingManager.objects.filter(
+        manager_user=user,
+        managed_user_id=meeting.created_by_id,
+        status=MeetingManager.Status.ACCEPTED,
+    ).exists()
+
+
+def _notify_cos_of_owner_update(commitment, actor):
+    """Alert the meeting's CoS when an action owner (not CoS) logs an update."""
+    cos_user = commitment.meeting.created_by
+    if not cos_user:
+        return
+    if actor and getattr(actor, 'user_id', None) == cos_user.pk:
+        return
+    if actor and actor.user_id:
+        is_delegate = MeetingManager.objects.filter(
+            manager_user_id=actor.user_id,
+            managed_user=cos_user,
+            status=MeetingManager.Status.ACCEPTED,
+        ).exists()
+        if is_delegate:
+            return
+    actor_name = actor.name if actor else 'Someone'
+    InAppNotification.objects.create(
+        organisation=commitment.organisation,
+        commitment=commitment,
+        notification_type=InAppNotification.Type.OWNER_UPDATE,
+        message=f'{actor_name} logged an update on: {commitment.normalised_text[:100]}',
     )
 
 
@@ -102,16 +144,32 @@ class CommitmentViewSet(
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
     def get_queryset(self):
-        org = get_user_org(self.request)
+        org  = get_user_org(self.request)
+        user = self.request.user
         if org is None:
             return Commitment.objects.none()
 
-        qs = (
-            Commitment.objects
-            .filter(organisation=org)
-            .select_related('owner', 'meeting')
-            .prefetch_related('tags', 'escalations')
-        )
+        if user.is_org_admin:
+            qs = Commitment.objects.filter(organisation=org)
+        else:
+            delegated_from = MeetingManager.objects.filter(
+                manager_user=user, status=MeetingManager.Status.ACCEPTED,
+            ).values_list('managed_user_id', flat=True)
+            cos_meeting_ids = Meeting.objects.filter(
+                organisation=org,
+            ).filter(
+                Q(created_by=user) | Q(created_by_id__in=delegated_from)
+            ).values_list('id', flat=True)
+
+            actor = getattr(user, 'person', None)
+            if actor:
+                qs = Commitment.objects.filter(organisation=org).filter(
+                    Q(meeting_id__in=cos_meeting_ids) | Q(owner=actor)
+                )
+            else:
+                qs = Commitment.objects.filter(organisation=org, meeting_id__in=cos_meeting_ids)
+
+        qs = qs.select_related('owner', 'meeting__created_by').prefetch_related('tags', 'escalations')
 
         deadline_before = self.request.query_params.get('deadline_before')
         if deadline_before:
@@ -160,6 +218,11 @@ class CommitmentViewSet(
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response(
+                {'detail': 'Only the meeting owner or a delegate can confirm commitments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if commitment.status != Commitment.Status.PENDING_REVIEW:
             return Response(
                 {'detail': f'Cannot confirm a commitment with status {commitment.status!r}.'},
@@ -182,6 +245,11 @@ class CommitmentViewSet(
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response(
+                {'detail': 'Only the meeting owner or a delegate can reject commitments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if commitment.status != Commitment.Status.PENDING_REVIEW:
             return Response(
                 {'detail': f'Cannot reject a commitment with status {commitment.status!r}.'},
@@ -204,6 +272,11 @@ class CommitmentViewSet(
     @action(detail=True, methods=['post'])
     def escalate(self, request, pk=None):
         commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response(
+                {'detail': 'Only the meeting owner or a delegate can escalate commitments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         closed = {Commitment.Status.DELIVERED, Commitment.Status.CANCELLED}
         if commitment.status in closed:
             return Response(
@@ -225,12 +298,12 @@ class CommitmentViewSet(
 
     @action(detail=False, methods=['post'], url_path='bulk-confirm')
     def bulk_confirm(self, request):
-        """Confirm all PENDING_REVIEW commitments, optionally filtered by minimum confidence."""
+        """Confirm all PENDING_REVIEW commitments in accessible meetings."""
         org = get_user_org(request)
         if org is None:
             return Response({'detail': 'User has no organisation.'}, status=status.HTTP_403_FORBIDDEN)
 
-        qs = Commitment.objects.filter(organisation=org, status=Commitment.Status.PENDING_REVIEW)
+        qs = self.get_queryset().filter(status=Commitment.Status.PENDING_REVIEW)
 
         meeting_id = request.data.get('meeting')
         if meeting_id:
@@ -357,23 +430,30 @@ class CommitmentViewSet(
             else:
                 commitment.save(update_fields=['status', 'updated_at'])
 
+        actor = _get_actor(request)
         _log(
             commitment,
             CommitmentEvent.EventType.FIELD_EDITED,
-            _get_actor(request),
+            actor,
             old_value={'status': old_status} if new_status else None,
             new_value={'status': commitment.status} if new_status else None,
             note=f'Owner update: {response_text}',
         )
+        _notify_cos_of_owner_update(commitment, actor)
         return Response({
-            'detail':     'Update logged.',
-            'status':     commitment.status,
-            'response':   response_text,
+            'detail':   'Update logged.',
+            'status':   commitment.status,
+            'response': response_text,
         })
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
         commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response(
+                {'detail': 'Only the meeting owner or a delegate can resolve commitments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         closed = {
             Commitment.Status.DELIVERED,
             Commitment.Status.CANCELLED,
@@ -416,6 +496,11 @@ class CommitmentViewSet(
     @action(detail=True, methods=['post'])
     def reopen(self, request, pk=None):
         commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response(
+                {'detail': 'Only the meeting owner or a delegate can reopen commitments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         reopenable = {
             Commitment.Status.DELIVERED,
             Commitment.Status.CANCELLED,
@@ -436,11 +521,25 @@ class CommitmentViewSet(
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
         commitment = self.get_object()
+        user       = request.user
+        actor      = _get_actor(request)
+        is_cos     = _has_cos_access(user, commitment.meeting)
 
         events = []
 
-        # Primary audit log
-        for ev in commitment.events.select_related('actor').order_by('occurred_at'):
+        if is_cos:
+            event_qs     = commitment.events.select_related('actor').order_by('occurred_at')
+            escalation_qs = commitment.escalations.select_related('escalated_by', 'escalated_to').order_by('occurred_at')
+        else:
+            # Action owners only see events they authored themselves
+            event_qs = (
+                commitment.events.filter(actor=actor)
+                .select_related('actor')
+                .order_by('occurred_at')
+            ) if actor else commitment.events.none()
+            escalation_qs = commitment.escalations.none()
+
+        for ev in event_qs:
             events.append({
                 'type':        'event',
                 'event_type':  ev.event_type,
@@ -452,8 +551,7 @@ class CommitmentViewSet(
                 'occurred_at': ev.occurred_at,
             })
 
-        # Escalation events — include for detail (message text, outcome, target person)
-        for esc in commitment.escalations.select_related('escalated_by', 'escalated_to').order_by('occurred_at'):
+        for esc in escalation_qs:
             events.append({
                 'type':        'escalation',
                 'event_type':  esc.method,

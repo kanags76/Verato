@@ -4,6 +4,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -17,8 +18,16 @@ from .serializers import (
 )
 from .parsers import extract_text_from_file
 from .tasks import process_meeting, process_meeting_pass2, process_import
-from apps.accounts.models import Person
+from apps.accounts.models import MeetingManager, Person
 from apps.accounts.views import get_user_org
+
+
+def _accessible_meeting_q(user):
+    """Q filter: meetings the user owns directly or via accepted delegation."""
+    delegated_from = MeetingManager.objects.filter(
+        manager_user=user, status=MeetingManager.Status.ACCEPTED,
+    ).values_list('managed_user_id', flat=True)
+    return Q(created_by=user) | Q(created_by_id__in=delegated_from)
 
 
 @extend_schema_view(
@@ -54,14 +63,14 @@ class MeetingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Up
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        org = get_user_org(self.request)
+        org  = get_user_org(self.request)
+        user = self.request.user
         if org is None:
             return Meeting.objects.none()
-        return (
-            Meeting.objects.filter(organisation=org)
-            .prefetch_related('topics')
-            .order_by('-occurred_at')
-        )
+        base = Meeting.objects.filter(organisation=org)
+        if not user.is_org_admin:
+            base = base.filter(_accessible_meeting_q(user))
+        return base.prefetch_related('topics').order_by('-occurred_at')
 
     @action(detail=True, methods=['get'])
     def transcript(self, request, pk=None):
@@ -270,6 +279,7 @@ class MeetingUploadView(APIView):
         title = data.get('title', '')
         meeting = Meeting.objects.create(
             organisation=org,
+            created_by=request.user,
             title=title,
             occurred_at=occurred_at,
             platform=Meeting.Platform.UPLOAD,
@@ -394,6 +404,7 @@ class MeetingImportView(APIView):
 
         meeting = Meeting.objects.create(
             organisation=org,
+            created_by=request.user,
             title=data.get('title', ''),
             occurred_at=timezone.now(),
             platform=Meeting.Platform.IMPORT,

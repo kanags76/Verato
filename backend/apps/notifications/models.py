@@ -171,6 +171,7 @@ class InAppNotification(models.Model):
         GMAIL_REPLY     = 'gmail_reply',    'Gmail Reply'
         MEETING_READY   = 'meeting_ready',  'Meeting Ready'
         MEETING_FAILED  = 'meeting_failed', 'Meeting Failed'
+        OWNER_UPDATE    = 'owner_update',   'Owner Update'
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organisation = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')

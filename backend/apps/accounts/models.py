@@ -146,3 +146,28 @@ class EmailOTP(models.Model):
         indexes = [
             models.Index(fields=['user', 'purpose', 'created_at'], name='emailotp_user_purpose_idx'),
         ]
+
+
+class MeetingManager(models.Model):
+    """
+    Two-sided delegation of meeting management access.
+    managed_user (the meeting owner) creates the record.
+    manager_user must explicitly accept before gaining access.
+    Either party can delete: managed_user revokes, manager_user declines or resigns.
+    """
+    class Status(models.TextChoices):
+        PENDING  = 'pending',  'Pending'
+        ACCEPTED = 'accepted', 'Accepted'
+        DECLINED = 'declined', 'Declined'
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='meeting_managers')
+    manager_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='manages_for')
+    managed_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delegated_to')
+    status       = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    accepted_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table        = 'accounts_meetingmanager'
+        unique_together = [['organisation', 'manager_user', 'managed_user']]

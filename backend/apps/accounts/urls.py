@@ -9,6 +9,7 @@ from .views import (
     InviteView,
     LogoutView,
     MeView,
+    MeetingManagerViewSet,
     OrgSettingsView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -21,6 +22,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register('persons', PersonViewSet, basename='person')
+router.register('managers', MeetingManagerViewSet, basename='manager')
 
 urlpatterns = [
     path('auth/me/',                        MeView.as_view(),                  name='me'),
