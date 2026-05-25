@@ -1,8 +1,10 @@
 import logging
+import random
 import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.core import signing
 from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
@@ -19,7 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.commitments.models import Commitment
 
-from .models import Invitation, Organisation, Person, User
+from .models import EmailOTP, Invitation, Organisation, Person, User
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .serializers import (
@@ -39,6 +41,193 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
 logger = logging.getLogger(__name__)
+
+
+# ── OTP Login ────────────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['auth'],
+    summary='Step 1: verify password, send OTP email',
+    request=inline_serializer('OTPLoginRequest', fields={
+        'email':    drf_serializers.EmailField(),
+        'password': drf_serializers.CharField(),
+    }),
+    responses={200: inline_serializer('OTPLoginResponse', fields={
+        'otp_required':  drf_serializers.BooleanField(),
+        'session_token': drf_serializers.CharField(),
+    })},
+)
+class EmailLoginView(APIView):
+    """Step 1 of 2-step login: verify password, send OTP via SES."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email    = request.data.get('email', '').lower().strip()
+        password = request.data.get('password', '')
+
+        if not email or not password:
+            return Response({'detail': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if not user or not user.check_password(password):
+            return Response(
+                {'detail': 'No active account found with the given credentials.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        otp = _create_otp(user, EmailOTP.Purpose.LOGIN)
+        _send_otp_email(user, otp.code, EmailOTP.Purpose.LOGIN)
+
+        session_token = signing.dumps(str(user.id), salt='otp-login')
+        return Response({'otp_required': True, 'session_token': session_token})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Step 2: validate OTP code → return JWT tokens',
+    request=inline_serializer('VerifyOTPRequest', fields={
+        'session_token': drf_serializers.CharField(),
+        'code':          drf_serializers.CharField(),
+    }),
+    responses={200: inline_serializer('TokenResponse', fields={
+        'access':  drf_serializers.CharField(),
+        'refresh': drf_serializers.CharField(),
+    })},
+)
+class VerifyOTPView(APIView):
+    """Step 2 of 2-step login: validate OTP, return JWT."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        session_token = request.data.get('session_token', '')
+        code          = request.data.get('code', '').strip()
+
+        if not session_token or not code:
+            return Response({'detail': 'session_token and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_id = signing.loads(session_token, salt='otp-login', max_age=600)
+        except signing.SignatureExpired:
+            return Response({'detail': 'Session expired. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+        except signing.BadSignature:
+            return Response({'detail': 'Invalid session.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'Invalid session.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp = (
+            EmailOTP.objects
+            .filter(user=user, purpose=EmailOTP.Purpose.LOGIN, used_at__isnull=True)
+            .order_by('-created_at')
+            .first()
+        )
+
+        if otp is None:
+            return Response({'detail': 'No active OTP found. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+        if timezone.now() > otp.expires_at:
+            return Response({'detail': 'OTP has expired. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+        if otp.attempts >= 5:
+            return Response({'detail': 'Too many failed attempts. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp.code != code:
+            otp.attempts += 1
+            otp.save(update_fields=['attempts'])
+            remaining = 5 - otp.attempts
+            return Response(
+                {'detail': f'Invalid code. {remaining} attempt(s) remaining.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        otp.used_at = timezone.now()
+        otp.save(update_fields=['used_at'])
+        return Response(_issue_tokens(user))
+
+
+# ── Password Reset ────────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['auth'],
+    summary='Request a password reset OTP (sent via email)',
+    request=inline_serializer('PasswordResetRequest', fields={'email': drf_serializers.EmailField()}),
+    responses={200: inline_serializer('PasswordResetResponse', fields={'detail': drf_serializers.CharField()})},
+)
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').lower().strip()
+        user  = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user:
+            otp = _create_otp(user, EmailOTP.Purpose.PASSWORD_RESET)
+            _send_otp_email(user, otp.code, EmailOTP.Purpose.PASSWORD_RESET)
+        # Always 200 — never reveal whether the email is registered
+        return Response({'detail': 'If that email is registered, a reset code has been sent.'})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Confirm password reset with OTP code',
+    request=inline_serializer('PasswordResetConfirmRequest', fields={
+        'email':        drf_serializers.EmailField(),
+        'otp':          drf_serializers.CharField(),
+        'new_password': drf_serializers.CharField(),
+    }),
+    responses={200: inline_serializer('PasswordResetConfirmResponse', fields={'detail': drf_serializers.CharField()})},
+)
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email    = request.data.get('email', '').lower().strip()
+        code     = request.data.get('otp', '').strip()
+        new_pass = request.data.get('new_password', '')
+
+        if not email or not code or not new_pass:
+            return Response({'detail': 'email, otp, and new_password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(new_pass) < 8:
+            return Response({'detail': 'Password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email, is_active=True)
+        except User.DoesNotExist:
+            return Response({'detail': 'Invalid code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp = (
+            EmailOTP.objects
+            .filter(user=user, purpose=EmailOTP.Purpose.PASSWORD_RESET, used_at__isnull=True)
+            .order_by('-created_at')
+            .first()
+        )
+
+        if otp is None or timezone.now() > otp.expires_at:
+            return Response({'detail': 'Invalid or expired code.'}, status=status.HTTP_400_BAD_REQUEST)
+        if otp.attempts >= 5:
+            return Response({'detail': 'Too many failed attempts. Please request a new code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp.code != code:
+            otp.attempts += 1
+            otp.save(update_fields=['attempts'])
+            return Response({'detail': 'Invalid code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            otp.used_at = timezone.now()
+            otp.save(update_fields=['used_at'])
+            user.set_password(new_pass)
+            user.save(update_fields=['password'])
+            # Blacklist all outstanding refresh tokens for this user
+            try:
+                from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+                for t in OutstandingToken.objects.filter(user=user):
+                    try:
+                        RefreshToken(t.token).blacklist()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        return Response({'detail': 'Password reset successful. Please log in with your new password.'})
 
 
 def get_user_org(request):
@@ -545,6 +734,50 @@ class OrgSettingsView(APIView):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _create_otp(user, purpose):
+    """Invalidate previous unused OTPs for this purpose, then create a fresh one."""
+    EmailOTP.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(used_at=timezone.now())
+    code = f"{random.randint(0, 999999):06d}"
+    return EmailOTP.objects.create(
+        user=user,
+        code=code,
+        purpose=purpose,
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
+
+
+def _send_otp_email(user, code, purpose):
+    subjects = {
+        EmailOTP.Purpose.LOGIN:          'Your Verato login code',
+        EmailOTP.Purpose.PASSWORD_RESET: 'Reset your Verato password',
+    }
+    bodies = {
+        EmailOTP.Purpose.LOGIN: (
+            f"Hi {user.first_name or user.email},\n\n"
+            f"Your Verato login code is:\n\n    {code}\n\n"
+            f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+            f"If you didn't try to log in, please ignore this email."
+        ),
+        EmailOTP.Purpose.PASSWORD_RESET: (
+            f"Hi {user.first_name or user.email},\n\n"
+            f"Your Verato password reset code is:\n\n    {code}\n\n"
+            f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+            f"If you didn't request a password reset, please ignore this email."
+        ),
+    }
+    try:
+        send_mail(
+            subject=subjects.get(purpose, 'Your Verato code'),
+            message=bodies.get(purpose, f"Your code is: {code}"),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        logger.error("Failed to send OTP email to %s: %s", user.email, exc)
+        raise
+
 
 def _upsert_invite(org, email, invited_by):
     """Create or refresh an invite for this email. Resets token + expiry if re-inviting."""

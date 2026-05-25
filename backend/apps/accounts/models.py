@@ -125,3 +125,24 @@ class Person(models.Model):
             models.Index(fields=['organisation', 'slack_user_id']),
             models.Index(fields=['organisation', 'first_seen_at']),
         ]
+
+
+class EmailOTP(models.Model):
+    class Purpose(models.TextChoices):
+        LOGIN          = 'login',          'Login'
+        PASSWORD_RESET = 'password_reset', 'Password Reset'
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    code       = models.CharField(max_length=6)
+    purpose    = models.CharField(max_length=20, choices=Purpose.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at    = models.DateTimeField(null=True, blank=True)
+    attempts   = models.IntegerField(default=0)
+
+    class Meta:
+        db_table = 'accounts_emailotp'
+        indexes = [
+            models.Index(fields=['user', 'purpose', 'created_at'], name='emailotp_user_purpose_idx'),
+        ]

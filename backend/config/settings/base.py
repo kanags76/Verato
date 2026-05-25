@@ -17,7 +17,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Third party
-    'anymail',
+
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -125,12 +125,14 @@ GEMINI_EXTRACTION_MODEL = config('GEMINI_EXTRACTION_MODEL', default='gemini-2.5-
 GEMINI_CLASSIFY_MODEL   = config('GEMINI_CLASSIFY_MODEL',   default='gemini-2.5-flash-lite')
 GEMINI_EMBEDDING_MODEL  = config('GEMINI_EMBEDDING_MODEL',  default='text-embedding-004')
 
-# ── Email (SendGrid via Anymail) ──────────────────────────────────────────────
-EMAIL_BACKEND   = 'anymail.backends.sendgrid.EmailBackend'
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@verato.app')
-ANYMAIL = {
-    'SENDGRID_API_KEY': config('SENDGRID_API_KEY', default='placeholder'),
-}
+# ── Email (Amazon SES via SMTP) ───────────────────────────────────────────────
+EMAIL_BACKEND      = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST         = config('EMAIL_HOST',          default='email-smtp.us-east-1.amazonaws.com')
+EMAIL_PORT         = config('EMAIL_PORT',          default=587, cast=int)
+EMAIL_USE_TLS      = True
+EMAIL_HOST_USER    = config('EMAIL_HOST_USER',     default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL',  default='noreply@twocents.ai')
 
 # ── Slack ─────────────────────────────────────────────────────────────────────
 SLACK_BOT_TOKEN      = config('SLACK_BOT_TOKEN',      default='')
