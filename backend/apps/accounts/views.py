@@ -472,6 +472,64 @@ class AcceptInviteView(APIView):
         return Response(_issue_tokens(user), status=status.HTTP_201_CREATED)
 
 
+# ── Invitation management (resend / revoke) ───────────────────────────────────
+
+@extend_schema(
+    tags=['auth'],
+    summary='Resend a pending invitation — refreshes the 7-day token and re-sends the email',
+    responses={200: inline_serializer('ResendInviteResponse', fields={'detail': drf_serializers.CharField()})},
+)
+class InvitationResendView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not request.user.is_org_admin:
+            return Response({'detail': 'Only org admins can resend invitations.'}, status=status.HTTP_403_FORBIDDEN)
+
+        org = get_user_org(request)
+        try:
+            invite = Invitation.objects.get(pk=pk, organisation=org)
+        except Invitation.DoesNotExist:
+            return Response({'detail': 'Invitation not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if invite.is_used:
+            return Response({'detail': 'This invitation has already been accepted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Refresh token + expiry
+        invite.token      = secrets.token_urlsafe(32)
+        invite.expires_at = timezone.now() + timedelta(days=7)
+        invite.invited_by = request.user
+        invite.save(update_fields=['token', 'expires_at', 'invited_by'])
+        _send_invite_email(invite)
+
+        return Response({'detail': 'Invitation resent.'})
+
+
+@extend_schema(
+    tags=['auth'],
+    summary='Revoke a pending invitation',
+    responses={204: None},
+)
+class InvitationRevokeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        if not request.user.is_org_admin:
+            return Response({'detail': 'Only org admins can revoke invitations.'}, status=status.HTTP_403_FORBIDDEN)
+
+        org = get_user_org(request)
+        try:
+            invite = Invitation.objects.get(pk=pk, organisation=org)
+        except Invitation.DoesNotExist:
+            return Response({'detail': 'Invitation not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if invite.is_used:
+            return Response({'detail': 'Cannot revoke an already accepted invitation.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        invite.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 # ── Person ViewSet ────────────────────────────────────────────────────────────
 
 @extend_schema_view(
