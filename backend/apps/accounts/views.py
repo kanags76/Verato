@@ -124,14 +124,18 @@ class ResendVerificationView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '').lower().strip()
-        if not email:
-            return Response({'detail': 'email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        email    = request.data.get('email', '').lower().strip()
+        password = request.data.get('password', '')
+
+        if not email or not password:
+            return Response({'detail': 'email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.filter(email__iexact=email, is_active=False).first()
-        if not user:
-            # Don't reveal whether the email exists or is already active
-            return Response({'detail': 'If that email has a pending verification, a new code has been sent.'})
+        if not user or not user.check_password(password):
+            return Response(
+                {'detail': 'No unverified account found with those credentials.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         otp = _create_otp(user, EmailOTP.Purpose.EMAIL_VERIFICATION)
         _send_otp_email(user, otp.code, EmailOTP.Purpose.EMAIL_VERIFICATION)
