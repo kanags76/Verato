@@ -860,6 +860,97 @@ Committed as `feat(frontend): Sprint 6 delegation UI + auth flow updates` (`4987
 
 ---
 
+#### Sprint 7 — User-Scoped Notifications + Delegation Notifications ✓ DONE
+
+**Goal:** Fix `InAppNotification` to be truly per-user (not org-wide), define proper notification recipients for every existing type, add a `COMMITMENT_CLOSED` type for action owners, and send both email + in-app notification when a delegation is created.
+
+---
+
+**Problem fixed:** `InAppNotification` had no `recipient_user` — notifications were filtered org-wide, meaning every user in the org saw every notification (Slack replies, Gmail replies, meeting processing results). This was a privacy and UX violation.
+
+---
+
+**Model change — `InAppNotification`** (migration `0012`):
+
+```python
+recipient_user = models.ForeignKey(
+    'accounts.User',
+    on_delete=models.CASCADE,
+    null=True, blank=True,
+    related_name='notifications',
+)
+```
+
+All notification views (`list`, `unread_count`, `mark_read`, `mark_all_read`) now filter by `recipient_user=request.user` instead of `organisation=org`.
+
+---
+
+**Notification routing rules (defined + implemented):**
+
+| Notification type | Recipient | Trigger |
+|---|---|---|
+| `meeting_ready` | `meeting.created_by` (meeting uploader / CoS) | `process_meeting` or `process_meeting_pass2` completes successfully |
+| `meeting_failed` | `meeting.created_by` (meeting uploader / CoS) | `process_meeting` or `process_meeting_pass2` fails after max retries |
+| `slack_reply` | `commitment.meeting.created_by` (CoS) | Action owner clicks Done/Delayed/Blocked on Slack nudge DM |
+| `gmail_reply` | `commitment.meeting.created_by` (CoS) | `poll_gmail_replies` parses a reply in a nudge email thread |
+| `owner_update` | `commitment.meeting.created_by` (CoS) | Action owner calls `POST /commitments/{id}/log-update/` |
+| `commitment_closed` | `commitment.owner.user` (action owner) | CoS calls `POST /commitments/{id}/resolve/` with outcome `done` or `deferred` |
+| `delegation_invite` | `manager_user` (delegatee) | CoS calls `POST /managers/` to create a new delegation |
+
+---
+
+**New notification type — `COMMITMENT_CLOSED`** (migration `0012`):
+
+Fires when a CoS resolves or defers a commitment. Notifies the action owner so they know the outcome. Message: `"Your action '{text}' has been marked as Done."` / `"… deferred."`
+
+---
+
+**New notification type — `DELEGATION_INVITE`** (migration `0013`):
+
+Fires when a new delegation is created (`POST /managers/`). Only fires on creation (not on duplicate `get_or_create`). Both channels:
+
+- **In-app:** `InAppNotification(type=DELEGATION_INVITE, recipient_user=manager_user, message="X has invited you to manage their action items.")`
+- **Email:** HTML template `templates/emails/delegation_invite.html` — sent via SES to `manager_user.email`. Subject: `"{delegator name} invited you to manage their action items on Verato"`. Body includes CTA linking to `settings.FRONTEND_URL`.
+
+---
+
+**New setting — `FRONTEND_URL`:**
+
+```python
+FRONTEND_URL = config('FRONTEND_URL', default='https://app.twocents.ai')
+```
+
+Used in outbound emails that need to link back to the app. Override via env var on EC2.
+
+---
+
+**`create_cos_notification()` signature updated:**
+
+```python
+def create_cos_notification(org, commitment, message, notification_type, recipient_user=None):
+```
+
+All existing call sites updated to pass the correct `recipient_user` per the routing table above.
+
+---
+
+**Implementation files changed:**
+
+| File | Change |
+|---|---|
+| `notifications/models.py` | `recipient_user` FK + `COMMITMENT_CLOSED` + `DELEGATION_INVITE` types |
+| `notifications/migrations/0012_*` | AddField `recipient_user`, AlterField `notification_type` (adds `COMMITMENT_CLOSED`) |
+| `notifications/migrations/0013_*` | AlterField `notification_type` (adds `DELEGATION_INVITE`) |
+| `notifications/views.py` | `create_cos_notification()` accepts `recipient_user`; all notification views filter by `recipient_user`; `_handle_done/delayed/blocked` pass `meeting.created_by` |
+| `notifications/tasks.py` | `poll_gmail_replies` passes `commitment.meeting.created_by` as `recipient_user` |
+| `meetings/tasks.py` | `process_meeting` + `process_meeting_pass2` pass `meeting.created_by` as `recipient_user`; added `created_by` to `select_related` |
+| `commitments/views.py` | `_notify_cos_of_owner_update` passes `cos_user` as `recipient_user`; `resolve()` creates `COMMITMENT_CLOSED` notification for action owner |
+| `accounts/views.py` | `_send_delegation_notifications()` helper: in-app + email on `POST /managers/` |
+| `config/settings/base.py` | `FRONTEND_URL` setting |
+| `templates/emails/delegation_invite.html` | New email template |
+
+---
+
 ### Phase 3B — Transcript Source Integrations ← NEXT
 
 **Goal:** Ingest transcripts automatically from the tools CoS teams already use — without requiring Zoom cloud recording or Google Meet.

@@ -206,7 +206,7 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/gmail/oauth/start/` | GET | Redirect to Google OAuth consent |
 | `/api/v1/gmail/oauth/callback/` | GET | Gmail OAuth callback — stores per-org access + refresh tokens |
 | **Notifications** | | |
-| `/api/v1/notifications/` | GET | Last 50 in-app notifications for the org |
+| `/api/v1/notifications/` | GET | Last 50 in-app notifications for current user (user-scoped, not org-wide) |
 | `/api/v1/notifications/unread-count/` | GET | `{unread: N}` — for badge |
 | `/api/v1/notifications/<id>/read/` | POST | Mark one notification as read |
 | `/api/v1/notifications/mark-all-read/` | POST | Clear all unread badges |
@@ -285,6 +285,7 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W17.5 | Phase 3A Sprint 3–4: Forgot-password OTP flow, invitation resend/revoke | ✓ Done |
 | W18 | Phase 3A Sprint 5–6: Meetings commitment count, meeting ownership & delegation | ✓ Done |
 | W18.5 | Sprint 6 frontend: delegation UI, role-aware commitment actions, OTP registration flow, ActivateAccount screen | ✓ Done |
+| W19 | User-scoped notifications: `recipient_user` FK on `InAppNotification`, `COMMITMENT_CLOSED` + `DELEGATION_INVITE` types, routing rules per notification type, delegation invite email + in-app | ✓ Done |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
@@ -294,7 +295,7 @@ PHASE 2.6 — Nudge engine + Gmail      ✓ COMPLETE
 PHASE 2.7 — In-app notifications      ✓ COMPLETE
 PHASE 2.8 — Passive ingestion         ✓ COMPLETE (Google Meet + Zoom auto-processing)
 PHASE 2.9 — Frontend integrations UI  ✓ COMPLETE (Calendar + Zoom cards, notification bell)
-PHASE 3A — Auth, Legal & Team Mgmt    ✓ COMPLETE (email verify, password reset, invitations, ownership)
+PHASE 3A — Auth, Legal & Team Mgmt    ✓ COMPLETE (email verify, password reset, invitations, ownership, user-scoped notifications)
 PHASE 3B — Transcript Sources         ← Next (tl;dv, Granola, Fathom)
 ```
 
@@ -330,6 +331,7 @@ PHASE 3B — Transcript Sources         ← Next (tl;dv, Granola, Fathom)
 | `ZOOM_CLIENT_SECRET` | Zoom Marketplace app |
 | `ZOOM_WEBHOOK_SECRET` | Zoom Event Subscriptions secret token |
 | `ZOOM_OAUTH_REDIRECT_URI` | `/api/v1/zoom/oauth/callback/` |
+| `FRONTEND_URL` | Frontend base URL used in notification emails (default `https://app.twocents.ai`) |
 
 ### Frontend — `frontend/.env.local` (gitignored)
 
