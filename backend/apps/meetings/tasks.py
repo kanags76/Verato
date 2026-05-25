@@ -112,7 +112,7 @@ def process_meeting(self, meeting_id: str):
     - If no clarifications → save commitments directly, set COMPLETE.
     """
     try:
-        meeting = Meeting.objects.select_related('organisation').get(id=meeting_id)
+        meeting = Meeting.objects.select_related('organisation', 'created_by').get(id=meeting_id)
     except Meeting.DoesNotExist:
         logger.error("process_meeting: meeting %s not found", meeting_id)
         return
@@ -126,6 +126,7 @@ def process_meeting(self, meeting_id: str):
     meeting.save(update_fields=['processing_status'])
 
     notification_args = None  # set inside try, fired outside to avoid retry-on-notify bug
+    notification_recipient = meeting.created_by
     try:
         participants = list(meeting.participants.values_list('name', flat=True))
         result = extract_commitments(
@@ -196,7 +197,7 @@ def process_meeting(self, meeting_id: str):
     if notification_args:
         try:
             from apps.notifications.views import create_cos_notification
-            create_cos_notification(*notification_args)
+            create_cos_notification(*notification_args, recipient_user=notification_recipient)
         except Exception as exc:
             logger.warning("process_meeting: notification failed for %s: %s", meeting_id, exc)
 
@@ -208,7 +209,7 @@ def process_meeting_pass2(self, meeting_id: str):
     Sends answered clarifications as context to Gemini, then saves commitments.
     """
     try:
-        meeting = Meeting.objects.select_related('organisation').get(id=meeting_id)
+        meeting = Meeting.objects.select_related('organisation', 'created_by').get(id=meeting_id)
     except Meeting.DoesNotExist:
         logger.error("process_meeting_pass2: meeting %s not found", meeting_id)
         return
@@ -222,6 +223,7 @@ def process_meeting_pass2(self, meeting_id: str):
     meeting.save(update_fields=['processing_status'])
 
     notification_args = None
+    notification_recipient = meeting.created_by
     try:
         clarifications = list(
             meeting.clarifications.values('question', 'answer').order_by('order')
@@ -281,7 +283,7 @@ def process_meeting_pass2(self, meeting_id: str):
     if notification_args:
         try:
             from apps.notifications.views import create_cos_notification
-            create_cos_notification(*notification_args)
+            create_cos_notification(*notification_args, recipient_user=notification_recipient)
         except Exception as exc:
             logger.warning("process_meeting_pass2: notification failed for %s: %s", meeting_id, exc)
 

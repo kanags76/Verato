@@ -321,10 +321,12 @@ def poll_gmail_replies():
                     'blocked':  'reported a blocker',
                 }.get(intent, f'replied ({intent})')
                 from apps.notifications.views import create_cos_notification
+                cos_user = getattr(getattr(commitment, 'meeting', None), 'created_by', None)
                 create_cos_notification(
                     org, commitment,
                     f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via email.',
                     'gmail_reply',
+                    recipient_user=cos_user,
                 )
 
                 # Mark this message as processed so it is not re-handled on the next poll

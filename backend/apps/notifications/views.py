@@ -361,6 +361,14 @@ def slack_actions(request):
     return HttpResponse(status=200)
 
 
+def _cos_user(commitment):
+    """Return the User who owns the meeting (the CoS), or None."""
+    meeting = getattr(commitment, 'meeting', None)
+    if meeting is None:
+        return None
+    return getattr(meeting, 'created_by', None)
+
+
 def _handle_done(commitment):
     if commitment.status not in {Commitment.Status.DELIVERED, Commitment.Status.CANCELLED}:
         commitment.status      = Commitment.Status.DELIVERED
@@ -373,6 +381,7 @@ def _handle_done(commitment):
             commitment.organisation, commitment,
             f'{name} marked "{commitment.normalised_text[:80]}" as Done via Slack.',
             'slack_reply',
+            recipient_user=_cos_user(commitment),
         )
 
 
@@ -387,6 +396,7 @@ def _handle_delayed(commitment):
             commitment.organisation, commitment,
             f'{name} needs more time on "{commitment.normalised_text[:80]}" (Slack).',
             'slack_reply',
+            recipient_user=_cos_user(commitment),
         )
 
 
@@ -401,6 +411,7 @@ def _handle_blocked(commitment):
             commitment.organisation, commitment,
             f'{name} is blocked on "{commitment.normalised_text[:80]}" (Slack).',
             'slack_reply',
+            recipient_user=_cos_user(commitment),
         )
 
 
@@ -796,10 +807,10 @@ def slack_oauth_callback(request):
 
 # ── In-app notifications ──────────────────────────────────────────────────────
 
-def create_cos_notification(org, commitment, message, notification_type):
+def create_cos_notification(org, commitment, message, notification_type, recipient_user=None):
     """
-    Create an InAppNotification for all org admin users.
-    Called from Slack action handlers and Gmail poll task.
+    Create an InAppNotification for a specific user (recipient_user).
+    Called from Slack action handlers, Gmail poll task, and commitment views.
     """
     from .models import InAppNotification
     InAppNotification.objects.create(
@@ -807,6 +818,7 @@ def create_cos_notification(org, commitment, message, notification_type):
         commitment=commitment,
         message=message,
         notification_type=notification_type,
+        recipient_user=recipient_user,
     )
 
 
@@ -818,7 +830,7 @@ def notification_list(request):
     org = getattr(request.user, 'organisation', None)
     if org is None:
         return Response([])
-    qs = InAppNotification.objects.filter(organisation=org).order_by('-created_at')[:50]
+    qs = InAppNotification.objects.filter(recipient_user=request.user).order_by('-created_at')[:50]
     data = [
         {
             'id':                str(n.id),
@@ -841,7 +853,7 @@ def notification_unread_count(request):
     org = getattr(request.user, 'organisation', None)
     if org is None:
         return Response({'unread': 0})
-    count = InAppNotification.objects.filter(organisation=org, is_read=False).count()
+    count = InAppNotification.objects.filter(recipient_user=request.user, is_read=False).count()
     return Response({'unread': count})
 
 
@@ -852,7 +864,7 @@ def notification_mark_read(request, pk):
     from .models import InAppNotification
     org = getattr(request.user, 'organisation', None)
     try:
-        n = InAppNotification.objects.get(pk=pk, organisation=org)
+        n = InAppNotification.objects.get(pk=pk, recipient_user=request.user)
     except InAppNotification.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
     n.is_read = True
@@ -868,7 +880,7 @@ def notification_mark_all_read(request):
     org = getattr(request.user, 'organisation', None)
     if org is None:
         return Response({'detail': 'No organisation.'}, status=400)
-    InAppNotification.objects.filter(organisation=org, is_read=False).update(is_read=True)
+    InAppNotification.objects.filter(recipient_user=request.user, is_read=False).update(is_read=True)
     return Response({'detail': 'All marked as read.'})
 
 

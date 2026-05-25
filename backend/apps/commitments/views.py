@@ -81,6 +81,7 @@ def _notify_cos_of_owner_update(commitment, actor):
         commitment=commitment,
         notification_type=InAppNotification.Type.OWNER_UPDATE,
         message=f'{actor_name} logged an update on: {commitment.normalised_text[:100]}',
+        recipient_user=cos_user,
     )
 
 
@@ -497,6 +498,20 @@ class CommitmentViewSet(
                  'deadline': str(new_deadline) if new_deadline else None,
              },
              note=data.get('note', ''))
+
+        # Notify action owner when CoS resolves or defers
+        if data['outcome'] in {'done', 'deferred'}:
+            owner_user = getattr(getattr(commitment, 'owner', None), 'user', None)
+            if owner_user:
+                outcome_label = 'marked as Done' if data['outcome'] == 'done' else 'deferred'
+                InAppNotification.objects.create(
+                    organisation=commitment.organisation,
+                    commitment=commitment,
+                    notification_type=InAppNotification.Type.COMMITMENT_CLOSED,
+                    message=f'Your action "{commitment.normalised_text[:100]}" has been {outcome_label}.',
+                    recipient_user=owner_user,
+                )
+
         return Response(_serialize_commitment(commitment, request))
 
     @action(detail=True, methods=['post'])

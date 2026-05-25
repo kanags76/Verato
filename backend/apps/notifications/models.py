@@ -163,23 +163,25 @@ class ZoomRecording(models.Model):
 
 class InAppNotification(models.Model):
     """
-    Per-user in-app alert. Created when a commitment is updated via Slack button
-    click or Gmail reply parse. Frontend polls /api/v1/notifications/ for these.
+    Per-user in-app alert. recipient_user is the specific user who should see it.
+    Frontend polls /api/v1/notifications/ — returns only the current user's notifications.
     """
     class Type(models.TextChoices):
-        SLACK_REPLY     = 'slack_reply',    'Slack Reply'
-        GMAIL_REPLY     = 'gmail_reply',    'Gmail Reply'
-        MEETING_READY   = 'meeting_ready',  'Meeting Ready'
-        MEETING_FAILED  = 'meeting_failed', 'Meeting Failed'
-        OWNER_UPDATE    = 'owner_update',   'Owner Update'
+        SLACK_REPLY        = 'slack_reply',        'Slack Reply'
+        GMAIL_REPLY        = 'gmail_reply',        'Gmail Reply'
+        MEETING_READY      = 'meeting_ready',      'Meeting Ready'
+        MEETING_FAILED     = 'meeting_failed',     'Meeting Failed'
+        OWNER_UPDATE       = 'owner_update',       'Owner Update'
+        COMMITMENT_CLOSED  = 'commitment_closed',  'Commitment Closed'
 
-    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    organisation = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')
-    commitment   = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
-    message      = models.TextField()
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation     = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')
+    recipient_user   = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
+    commitment       = models.ForeignKey(Commitment, on_delete=models.CASCADE, related_name='notifications', null=True, blank=True)
+    message          = models.TextField()
     notification_type = models.CharField(max_length=20, choices=Type.choices)
-    is_read      = models.BooleanField(default=False)
-    created_at   = models.DateTimeField(auto_now_add=True)
+    is_read          = models.BooleanField(default=False)
+    created_at       = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'notifications_inappnotification'
