@@ -572,12 +572,12 @@ All frontend screens built by Google AI Studio, committed to `frontend/`. Stack:
 
 ---
 
-#### Sprint 1 — Privacy Policy & Terms ✓ PARTIAL
+#### Sprint 1 — Privacy Policy & Terms ✓ DONE
 
 | Item | Status | Detail |
 |---|---|---|
-| Privacy Policy page | ⏳ Frontend only | Managed in Google AI Studio frontend — static page at `/privacy` |
-| Terms of Service page | ⏳ Frontend only | Managed in Google AI Studio frontend — static page at `/terms` |
+| Privacy Policy page | ✓ DONE | Static page at `/privacy` — built in Google AI Studio frontend |
+| Terms of Service page | ✓ DONE | Static page at `/terms` — built in Google AI Studio frontend |
 | Backend enforcement | ⏸ Deferred | `terms_accepted_at` field not added — frontend handles consent UX |
 
 ---
