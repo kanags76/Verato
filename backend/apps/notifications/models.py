@@ -173,6 +173,7 @@ class InAppNotification(models.Model):
         MEETING_FAILED     = 'meeting_failed',     'Meeting Failed'
         OWNER_UPDATE       = 'owner_update',       'Owner Update'
         COMMITMENT_CLOSED  = 'commitment_closed',  'Commitment Closed'
+        DELEGATION_INVITE  = 'delegation_invite',  'Delegation Invite'
 
     id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organisation     = models.ForeignKey('accounts.Organisation', on_delete=models.CASCADE, related_name='in_app_notifications')

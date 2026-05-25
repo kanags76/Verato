@@ -8,6 +8,7 @@ SECRET_KEY    = config('DJANGO_SECRET_KEY')
 DEBUG         = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost',
                        cast=lambda v: [s.strip() for s in v.split(',')])
+FRONTEND_URL  = config('FRONTEND_URL', default='https://app.twocents.ai')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

@@ -902,6 +902,57 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 
+def _send_delegation_notifications(obj, delegator, delegatee, org):
+    """Email + in-app notification to delegatee when a new delegation is created."""
+    import logging
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.loader import render_to_string
+    from apps.notifications.models import InAppNotification
+
+    logger = logging.getLogger(__name__)
+
+    delegator_name = delegator.get_full_name() or delegator.email
+    delegatee_name = delegatee.get_full_name() or delegatee.email
+
+    # In-app notification
+    try:
+        InAppNotification.objects.create(
+            organisation=org,
+            notification_type=InAppNotification.Type.DELEGATION_INVITE,
+            message=f'{delegator_name} has invited you to manage their action items.',
+            recipient_user=delegatee,
+        )
+    except Exception as exc:
+        logger.warning("delegation in-app notification failed: %s", exc)
+
+    # Email notification
+    if not delegatee.email:
+        return
+    try:
+        context = {
+            'manager_name':  delegatee_name,
+            'delegator_name': delegator_name,
+            'org_name':      org.name,
+            'frontend_url':  settings.FRONTEND_URL,
+        }
+        html_body  = render_to_string('emails/delegation_invite.html', context)
+        text_body  = (
+            f"Hi {delegatee_name},\n\n"
+            f"{delegator_name} has invited you to manage their action items in {org.name} on Verato.\n\n"
+            f"Log in to Verato to accept or decline: {settings.FRONTEND_URL}\n"
+        )
+        msg = EmailMultiAlternatives(
+            subject=f"{delegator_name} invited you to manage their action items on Verato",
+            body=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[delegatee.email],
+        )
+        msg.attach_alternative(html_body, 'text/html')
+        msg.send()
+    except Exception as exc:
+        logger.error("delegation invite email failed for %s: %s", delegatee.email, exc)
+
+
 @extend_schema_view(
     list=extend_schema(tags=['managers'], summary='List delegations involving the current user'),
     create=extend_schema(tags=['managers'], summary='Delegate your meetings to another user (they must accept)'),
@@ -954,6 +1005,10 @@ class MeetingManagerViewSet(
             managed_user=request.user,
             defaults={'status': MeetingManager.Status.PENDING},
         )
+
+        if created:
+            _send_delegation_notifications(obj, delegator=request.user, delegatee=manager_user, org=org)
+
         http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
         return Response(MeetingManagerSerializer(obj).data, status=http_status)
 
