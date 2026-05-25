@@ -39,6 +39,20 @@ from .serializers import (
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        email    = request.data.get('email', '').lower().strip()
+        password = request.data.get('password', '')
+
+        # If credentials are valid but account is not yet verified, redirect to OTP flow
+        user = User.objects.filter(email__iexact=email, is_active=False).first()
+        if user and user.check_password(password):
+            otp = _create_otp(user, EmailOTP.Purpose.EMAIL_VERIFICATION)
+            _send_otp_email(user, otp.code, EmailOTP.Purpose.EMAIL_VERIFICATION)
+            session_token = signing.dumps(str(user.id), salt='email-verify')
+            return Response({'verification_required': True, 'session_token': session_token})
+
+        return super().post(request, *args, **kwargs)
+
 logger = logging.getLogger(__name__)
 
 
