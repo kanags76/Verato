@@ -1,5 +1,4 @@
 import logging
-import random
 import secrets
 from datetime import timedelta
 
@@ -738,7 +737,7 @@ class OrgSettingsView(APIView):
 def _create_otp(user, purpose):
     """Invalidate previous unused OTPs for this purpose, then create a fresh one."""
     EmailOTP.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(used_at=timezone.now())
-    code = f"{random.randint(0, 999999):06d}"
+    code = f"{secrets.randbelow(1_000_000):06d}"
     return EmailOTP.objects.create(
         user=user,
         code=code,
