@@ -13,7 +13,7 @@ from .views import (
     PersonViewSet,
     RegisterView,
     ValidateInviteView,
-    VerifyOTPView,
+    VerifyEmailView,
 )
 
 router = DefaultRouter()
@@ -27,7 +27,7 @@ urlpatterns = [
     path('auth/invite/validate/',           ValidateInviteView.as_view(),      name='validate-invite'),
     path('auth/invite/accept/',             AcceptInviteView.as_view(),        name='accept-invite'),
     path('auth/invitations/',               InvitationListView.as_view(),      name='invitation-list'),
-    path('auth/token/verify-otp/',          VerifyOTPView.as_view(),           name='verify-otp'),
+    path('auth/verify-email/',              VerifyEmailView.as_view(),          name='verify-email'),
     path('auth/password/reset/',            PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('auth/password/reset/confirm/',    PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('orgs/<uuid:pk>/settings/',        OrgSettingsView.as_view(),         name='org-settings'),

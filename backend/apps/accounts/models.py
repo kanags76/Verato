@@ -129,8 +129,8 @@ class Person(models.Model):
 
 class EmailOTP(models.Model):
     class Purpose(models.TextChoices):
-        LOGIN          = 'login',          'Login'
-        PASSWORD_RESET = 'password_reset', 'Password Reset'
+        EMAIL_VERIFICATION = 'email_verification', 'Email Verification'
+        PASSWORD_RESET     = 'password_reset',     'Password Reset'
 
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')

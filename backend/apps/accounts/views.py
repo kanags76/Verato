@@ -42,59 +42,22 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 logger = logging.getLogger(__name__)
 
 
-# ── OTP Login ────────────────────────────────────────────────────────────────
+# ── Email Verification (registration) ────────────────────────────────────────
 
 @extend_schema(
     tags=['auth'],
-    summary='Step 1: verify password, send OTP email',
-    request=inline_serializer('OTPLoginRequest', fields={
-        'email':    drf_serializers.EmailField(),
-        'password': drf_serializers.CharField(),
-    }),
-    responses={200: inline_serializer('OTPLoginResponse', fields={
-        'otp_required':  drf_serializers.BooleanField(),
-        'session_token': drf_serializers.CharField(),
-    })},
-)
-class EmailLoginView(APIView):
-    """Step 1 of 2-step login: verify password, send OTP via SES."""
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        email    = request.data.get('email', '').lower().strip()
-        password = request.data.get('password', '')
-
-        if not email or not password:
-            return Response({'detail': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = User.objects.filter(email__iexact=email, is_active=True).first()
-        if not user or not user.check_password(password):
-            return Response(
-                {'detail': 'No active account found with the given credentials.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        otp = _create_otp(user, EmailOTP.Purpose.LOGIN)
-        _send_otp_email(user, otp.code, EmailOTP.Purpose.LOGIN)
-
-        session_token = signing.dumps(str(user.id), salt='otp-login')
-        return Response({'otp_required': True, 'session_token': session_token})
-
-
-@extend_schema(
-    tags=['auth'],
-    summary='Step 2: validate OTP code → return JWT tokens',
-    request=inline_serializer('VerifyOTPRequest', fields={
+    summary='Verify email address after registration — activate account and return JWT',
+    request=inline_serializer('VerifyEmailRequest', fields={
         'session_token': drf_serializers.CharField(),
         'code':          drf_serializers.CharField(),
     }),
-    responses={200: inline_serializer('TokenResponse', fields={
+    responses={200: inline_serializer('VerifyEmailResponse', fields={
         'access':  drf_serializers.CharField(),
         'refresh': drf_serializers.CharField(),
     })},
 )
-class VerifyOTPView(APIView):
-    """Step 2 of 2-step login: validate OTP, return JWT."""
+class VerifyEmailView(APIView):
+    """Confirm the 6-digit OTP sent during registration, activate the account, return JWT."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -105,30 +68,28 @@ class VerifyOTPView(APIView):
             return Response({'detail': 'session_token and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user_id = signing.loads(session_token, salt='otp-login', max_age=600)
+            user_id = signing.loads(session_token, salt='email-verify', max_age=600)
         except signing.SignatureExpired:
-            return Response({'detail': 'Session expired. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Verification link expired. Please register again.'}, status=status.HTTP_400_BAD_REQUEST)
         except signing.BadSignature:
-            return Response({'detail': 'Invalid session.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Invalid verification token.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=user_id, is_active=False)
         except User.DoesNotExist:
-            return Response({'detail': 'Invalid session.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Invalid or already verified account.'}, status=status.HTTP_400_BAD_REQUEST)
 
         otp = (
             EmailOTP.objects
-            .filter(user=user, purpose=EmailOTP.Purpose.LOGIN, used_at__isnull=True)
+            .filter(user=user, purpose=EmailOTP.Purpose.EMAIL_VERIFICATION, used_at__isnull=True)
             .order_by('-created_at')
             .first()
         )
 
-        if otp is None:
-            return Response({'detail': 'No active OTP found. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
-        if timezone.now() > otp.expires_at:
-            return Response({'detail': 'OTP has expired. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+        if otp is None or timezone.now() > otp.expires_at:
+            return Response({'detail': 'Code has expired. Please register again.'}, status=status.HTTP_400_BAD_REQUEST)
         if otp.attempts >= 5:
-            return Response({'detail': 'Too many failed attempts. Please log in again.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Too many failed attempts. Please register again.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if otp.code != code:
             otp.attempts += 1
@@ -139,8 +100,12 @@ class VerifyOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        otp.used_at = timezone.now()
-        otp.save(update_fields=['used_at'])
+        with transaction.atomic():
+            otp.used_at = timezone.now()
+            otp.save(update_fields=['used_at'])
+            user.is_active = True
+            user.save(update_fields=['is_active'])
+
         return Response(_issue_tokens(user))
 
 
@@ -319,6 +284,7 @@ class RegisterView(APIView):
                 slug=slugify(data['org_name']),
                 plan=data['plan'],
             )
+            # is_active=False until email is verified via OTP
             user = User.objects.create_user(
                 username=data['email'],
                 email=data['email'],
@@ -327,6 +293,7 @@ class RegisterView(APIView):
                 last_name=data['last_name'],
                 organisation=org,
                 is_org_admin=True,
+                is_active=False,
             )
             Person.objects.create(
                 organisation=org,
@@ -335,7 +302,14 @@ class RegisterView(APIView):
                 email=data['email'],
             )
 
-        return Response({**_issue_tokens(user), 'is_first_login': True}, status=status.HTTP_201_CREATED)
+        otp = _create_otp(user, EmailOTP.Purpose.EMAIL_VERIFICATION)
+        _send_otp_email(user, otp.code, EmailOTP.Purpose.EMAIL_VERIFICATION)
+
+        session_token = signing.dumps(str(user.id), salt='email-verify')
+        return Response(
+            {'verification_required': True, 'session_token': session_token},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema(
@@ -748,15 +722,15 @@ def _create_otp(user, purpose):
 
 def _send_otp_email(user, code, purpose):
     subjects = {
-        EmailOTP.Purpose.LOGIN:          'Your Verato login code',
-        EmailOTP.Purpose.PASSWORD_RESET: 'Reset your Verato password',
+        EmailOTP.Purpose.EMAIL_VERIFICATION: 'Verify your Verato email address',
+        EmailOTP.Purpose.PASSWORD_RESET:     'Reset your Verato password',
     }
     bodies = {
-        EmailOTP.Purpose.LOGIN: (
+        EmailOTP.Purpose.EMAIL_VERIFICATION: (
             f"Hi {user.first_name or user.email},\n\n"
-            f"Your Verato login code is:\n\n    {code}\n\n"
+            f"Welcome to Verato! Your email verification code is:\n\n    {code}\n\n"
             f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
-            f"If you didn't try to log in, please ignore this email."
+            f"If you didn't create a Verato account, please ignore this email."
         ),
         EmailOTP.Purpose.PASSWORD_RESET: (
             f"Hi {user.first_name or user.email},\n\n"

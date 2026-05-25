@@ -11,14 +11,14 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenBlacklistView,
 )
-from apps.accounts.views import EmailLoginView
+from apps.accounts.views import EmailTokenObtainPairView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/v1/', include([
-        # Auth — step 1: password check + OTP dispatch
-        path('auth/token/',           EmailLoginView.as_view(), name='token_obtain_pair'),
+        # Auth
+        path('auth/token/',           EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
         path('auth/token/refresh/',   TokenRefreshView.as_view(),     name='token_refresh'),
         path('auth/token/blacklist/', TokenBlacklistView.as_view(),   name='token_blacklist'),
         # App routers
