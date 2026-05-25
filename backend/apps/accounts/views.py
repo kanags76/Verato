@@ -109,6 +109,37 @@ class VerifyEmailView(APIView):
         return Response(_issue_tokens(user))
 
 
+# ── Resend Verification ───────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['auth'],
+    summary='Resend email verification OTP for an unverified account',
+    request=inline_serializer('ResendVerificationRequest', fields={'email': drf_serializers.EmailField()}),
+    responses={200: inline_serializer('ResendVerificationResponse', fields={
+        'verification_required': drf_serializers.BooleanField(),
+        'session_token':         drf_serializers.CharField(),
+    })},
+)
+class ResendVerificationView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').lower().strip()
+        if not email:
+            return Response({'detail': 'email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email, is_active=False).first()
+        if not user:
+            # Don't reveal whether the email exists or is already active
+            return Response({'detail': 'If that email has a pending verification, a new code has been sent.'})
+
+        otp = _create_otp(user, EmailOTP.Purpose.EMAIL_VERIFICATION)
+        _send_otp_email(user, otp.code, EmailOTP.Purpose.EMAIL_VERIFICATION)
+
+        session_token = signing.dumps(str(user.id), salt='email-verify')
+        return Response({'verification_required': True, 'session_token': session_token})
+
+
 # ── Password Reset ────────────────────────────────────────────────────────────
 
 @extend_schema(
