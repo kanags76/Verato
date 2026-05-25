@@ -272,6 +272,10 @@ export const MeetingDetail = () => {
             <h1 className="text-4xl font-black tracking-tighter text-slate-900 leading-tight">
               {meeting.title}
             </h1>
+            <div className="flex items-center gap-2 text-blue-700 bg-blue-50 px-4 py-2 rounded-full w-fit">
+              <Users className="w-5 h-5" />
+              <span className="font-bold">Managed by {meeting.created_by_name || "Unknown"}</span>
+            </div>
             <div className="flex flex-wrap items-center gap-6">
               <div className="flex items-center gap-2 text-slate-500 font-bold">
                 <Calendar className="w-5 h-5 text-blue-500" />

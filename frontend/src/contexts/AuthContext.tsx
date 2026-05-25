@@ -5,7 +5,9 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   login: (credentials: Record<string, string>) => Promise<void>;
-  register: (details: RegisterData) => Promise<void>;
+  register: (details: RegisterData) => Promise<{ session_token: string }>;
+  verifyEmail: (session_token: string, code: string) => Promise<void>;
+  resendVerification: (credentials: Record<string, string>) => Promise<{ session_token: string }>;
   logout: () => Promise<void>;
 }
 
@@ -94,11 +96,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (details: RegisterData) => {
     const data = await authService.register(details);
+    return data;
+  };
+
+  const verifyEmail = async (session_token: string, code: string) => {
+    const data = await authService.verifyEmail(session_token, code);
     setTokens(data);
   };
 
+  const resendVerification = async (credentials: Record<string, string>) => {
+    const data = await authService.resendVerification(credentials);
+    return data;
+  };
+
   return (
-    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, register, logout }}>
+    <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, register, verifyEmail, resendVerification, logout }}>
       {children}
     </AuthContext.Provider>
   );

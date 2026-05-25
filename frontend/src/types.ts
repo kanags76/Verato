@@ -23,6 +23,7 @@ export interface Commitment {
   is_overdue?: boolean;
   is_escalated?: boolean;
   needs_manual_nudge?: boolean;
+  can_manage?: boolean;
   raw_text?: string;
   commitments_count?: number;
   pending_count?: number;
@@ -74,6 +75,7 @@ export interface Meeting {
   participants?: string[];
   summary?: string;
   external_url?: string;
+  created_by_name?: string;
 }
 
 export interface Clarification {

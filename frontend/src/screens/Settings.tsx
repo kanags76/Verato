@@ -27,13 +27,14 @@ import { Badge } from "@/src/components/ui/Badge";
 import { Avatar } from "@/src/components/ui/Avatar";
 import { cn } from "@/src/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { slackService, importService, nudgeSettingsService, gmailService, calendarService, zoomService } from "@/src/lib/api/services";
+import { slackService, importService, nudgeSettingsService, gmailService, calendarService, zoomService, managerService } from "@/src/lib/api/services";
 import { authService } from "@/src/lib/api/auth";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import { useRef, DragEvent, ChangeEvent } from "react";
 import { ImportSuccessModal } from "@/src/components/ImportSuccessModal";
 import { LinkSlackPeopleModal } from "@/src/components/LinkSlackPeopleModal";
+import { DelegationManagement } from "@/src/components/DelegationManagement";
 import { APP_VERSION } from "../types";
 
 export const Settings = () => {
@@ -606,6 +607,23 @@ export const Settings = () => {
                 )}
               </div>
             )}
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="space-y-6">
+          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+             <div className="flex gap-6 mb-8">
+              <div className="w-16 h-16 bg-blue-50 rounded-[20px] flex items-center justify-center text-blue-600 shadow-2xl shadow-blue-500/10 shrink-0">
+                <Users className="w-9 h-9" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-900">Delegation Management</h2>
+                <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
+                  Manage who can access your meetings or who you are acting on behalf of.
+                </p>
+              </div>
+            </div>
+            <DelegationManagement />
           </Card>
         </motion.div>
 

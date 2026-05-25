@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { globalSetError } from '@/src/components/ErrorProvider';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'https://api.verato.twocents.ai/api/v1').replace(/\/$/, '');
 
@@ -52,6 +53,7 @@ apiClient.interceptors.response.use(
       }
     }
     
+    globalSetError(error.response?.data?.detail || 'Something went wrong');
     return Promise.reject(error);
   }
 );

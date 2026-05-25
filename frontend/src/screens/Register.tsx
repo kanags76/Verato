@@ -30,13 +30,18 @@ export const Register = () => {
     last_name: '',
     email: '',
     password: '',
+    password_confirmation: '',
     org_name: '',
     plan: 'individual'
   });
   
   const [errors, setErrors] = useState<FormErrors>({});
+  const [agreed, setAgreed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const [step, setStep] = useState<'register' | 'verify'>('register');
+  const [otp, setOtp] = useState('');
+  const [sessionToken, setSessionToken] = useState('');
+  const { register, verifyEmail } = useAuth(); // Need to ensure useAuth provides verifyEmail
   const navigate = useNavigate();
 
   const validateForm = () => {
@@ -56,6 +61,8 @@ export const Register = () => {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters';
+    } else if (formData.password !== formData.password_confirmation) {
+      newErrors.password = 'Passwords do not match';
     }
     
     if (!formData.org_name.trim()) {
@@ -68,26 +75,44 @@ export const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
-    
-    setIsLoading(true);
-    setErrors({});
-    
-    try {
-      await register(formData);
-      // Auto-advances to onboarding flow
-      navigate('/onboarding/slack'); 
-    } catch (err: any) {
-      if (err.response?.data) {
-        setErrors({
-          ...err.response.data,
-          general: !err.response.data.detail ? undefined : err.response.data.detail
-        });
-      } else {
-        setErrors({ general: 'Connection failed. Please try again later.' });
+    if (step === 'register') {
+      if (!validateForm()) return;
+      
+      setIsLoading(true);
+      setErrors({});
+      
+      try {
+        const { password_confirmation, ...registerDetails } = formData;
+        const response = await register(registerDetails);
+        setSessionToken(response.session_token);
+        setStep('verify');
+      } catch (err: any) {
+        if (err.response?.data) {
+          setErrors({
+            ...err.response.data,
+            general: !err.response.data.detail ? undefined : err.response.data.detail
+          });
+        } else {
+          setErrors({ general: 'Connection failed. Please try again later.' });
+        }
+      } finally {
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false);
+    } else if (step === 'verify') {
+      if (!otp.trim()) {
+        setErrors({ general: 'OTP is required' });
+        return;
+      }
+      setIsLoading(true);
+      setErrors({});
+      try {
+        await verifyEmail(sessionToken, otp);
+        navigate('/onboarding/slack');
+      } catch (err: any) {
+        setErrors({ general: 'Invalid OTP' });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -121,112 +146,118 @@ export const Register = () => {
 
         <Card className="p-8 shadow-2xl border-slate-200">
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    name="first_name"
-                    type="text"
-                    required
-                    value={formData.first_name}
-                    onChange={handleChange}
-                    className={`w-full bg-slate-50 border ${errors.first_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
-                    placeholder="Jane"
-                  />
+                        {step === 'register' ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        name="first_name"
+                        type="text"
+                        required
+                        value={formData.first_name}
+                        onChange={handleChange}
+                        className={`w-full bg-slate-50 border ${errors.first_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                        placeholder="Jane"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        name="last_name"
+                        type="text"
+                        required
+                        value={formData.last_name}
+                        onChange={handleChange}
+                        className={`w-full bg-slate-50 border ${errors.last_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                        placeholder="Doe"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <AnimatePresence>
-                  {errors.first_name && (
-                    <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] text-rose-500 font-bold mt-1 ml-1">{errors.first_name}</motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    name="last_name"
-                    type="text"
-                    required
-                    value={formData.last_name}
-                    onChange={handleChange}
-                    className={`w-full bg-slate-50 border ${errors.last_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
-                    placeholder="Doe"
-                  />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Work Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      value={formData.email}
+                      onChange={handleChange}
+                      className={`w-full bg-slate-50 border ${errors.email ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                      placeholder="jane@company.com"
+                    />
+                  </div>
                 </div>
-                <AnimatePresence>
-                  {errors.last_name && (
-                    <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] text-rose-500 font-bold mt-1 ml-1">{errors.last_name}</motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Work Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={`w-full bg-slate-50 border ${errors.email ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
-                  placeholder="jane@company.com"
-                />
-              </div>
-              <AnimatePresence>
-                {errors.email && (
-                  <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] text-rose-500 font-bold mt-1 ml-1">{errors.email}</motion.p>
-                )}
-              </AnimatePresence>
-            </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Create Password (Min 8 characters)</label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      name="password"
+                      type="password"
+                      required
+                      value={formData.password}
+                      onChange={handleChange}
+                      className={`w-full bg-slate-50 border ${errors.password ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Confirm Password</label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      name="password_confirmation"
+                      type="password"
+                      required
+                      value={formData.password_confirmation}
+                      onChange={handleChange}
+                      className={`w-full bg-slate-50 border ${errors.password ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Create Password (Min 8 characters)</label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Organisation Name</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      name="org_name"
+                      type="text"
+                      required
+                      value={formData.org_name}
+                      onChange={handleChange}
+                      className={`w-full bg-slate-50 border ${errors.org_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
+                      placeholder="Acme Corp"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Enter Activation Code sent to {formData.email}</label>
                 <input
-                  name="password"
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={`w-full bg-slate-50 border ${errors.password ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
-                  placeholder="••••••••"
-                />
-              </div>
-              <AnimatePresence>
-                {errors.password && (
-                  <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] text-rose-500 font-bold mt-1 ml-1">{errors.password}</motion.p>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Organisation Name</label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  name="org_name"
                   type="text"
-                  required
-                  value={formData.org_name}
-                  onChange={handleChange}
-                  className={`w-full bg-slate-50 border ${errors.org_name ? 'border-rose-300 ring-4 ring-rose-50' : 'border-slate-200 focus:border-blue-500'} rounded-xl pl-10 pr-4 py-3 text-sm transition-all focus:outline-none`}
-                  placeholder="Acme Corp"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-sm transition-all focus:outline-none text-center text-2xl tracking-[0.5em]"
+                  placeholder="000000"
                 />
               </div>
-              <AnimatePresence>
-                {errors.org_name && (
-                  <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-[11px] text-rose-500 font-bold mt-1 ml-1">{errors.org_name}</motion.p>
-                )}
-              </AnimatePresence>
-            </div>
+            )}
+
 
             {errors.general && (
               <motion.div
@@ -239,19 +270,33 @@ export const Register = () => {
               </motion.div>
             )}
 
+            {step === 'register' && (
+              <div className="flex items-start gap-2 mt-4 text-[11px] text-slate-500 font-medium">
+                <input 
+                  type="checkbox" 
+                  checked={agreed} 
+                  onChange={(e) => setAgreed(e.target.checked)} 
+                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  I agree to the <a href="https://twocents.ai/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Terms of Service</a> and <a href="https://twocents.ai/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Privacy Policy</a>.
+                </span>
+              </div>
+            )}
+
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (step === 'register' && !agreed)}
               className="w-full h-12 text-lg shadow-blue-500/20 mt-2"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Creating account...</span>
+                  <span>{step === 'register' ? 'Creating account...' : 'Verifying...'}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span>Start using Verato</span>
+                  <span>{step === 'register' ? 'Send Activation' : 'Complete Registration'}</span>
                   <ArrowRight className="w-5 h-5" />
                 </div>
               )}

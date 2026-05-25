@@ -93,6 +93,10 @@ export const commitmentService = {
     const { data } = await apiClient.patch<Commitment>(`commitments/${id}/`, updates);
     return data;
   },
+  logUpdate: async (id: string, response: string): Promise<any> => {
+    const { data } = await apiClient.post(`commitments/${id}/log-update/`, { response });
+    return data;
+  },
   nudge: async (id: string, method: 'email' = 'email'): Promise<any> => {
     const { data } = await apiClient.post(`commitments/${id}/nudge/`, { method });
     return data;
@@ -394,6 +398,24 @@ export const zoomService = {
   },
   disconnect: async (): Promise<void> => {
     await apiClient.post('zoom/disconnect/');
+  },
+};
+
+export const managerService = {
+  getAll: async (): Promise<{ delegates: any[], managing_on_behalf_of: any[] }> => {
+    const { data } = await apiClient.get<{ delegates: any[], managing_on_behalf_of: any[] }>('managers/');
+    return data;
+  },
+  addDelegate: async (manager_user_id: string): Promise<any> => {
+    const { data } = await apiClient.post('managers/', { manager_user_id });
+    return data;
+  },
+  acceptDelegation: async (id: string): Promise<any> => {
+    const { data } = await apiClient.post(`managers/${id}/accept/`);
+    return data;
+  },
+  deleteDelegation: async (id: string): Promise<void> => {
+    await apiClient.delete(`managers/${id}/`);
   },
 };
 

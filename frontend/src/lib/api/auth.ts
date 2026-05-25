@@ -17,8 +17,8 @@ export interface RegisterData {
   plan: string;
 }
 
-export interface RegisterResponse extends TokenResponse {
-  is_first_login: boolean;
+export interface RegisterResponse {
+  session_token: string;
 }
 
 export interface UserProfile {
@@ -48,6 +48,14 @@ export const authService = {
   },
   register: async (details: RegisterData): Promise<RegisterResponse> => {
     const { data } = await apiClient.post<RegisterResponse>('auth/register/', details);
+    return data;
+  },
+  verifyEmail: async (session_token: string, code: string): Promise<TokenResponse> => {
+    const { data } = await apiClient.post<TokenResponse>('auth/verify-email/', { session_token, code });
+    return data;
+  },
+  resendVerification: async (credentials: Record<string, string>): Promise<{ session_token: string }> => {
+    const { data } = await apiClient.post<{ session_token: string }>('auth/resend-verification/', credentials);
     return data;
   },
   refresh: async (refresh: string): Promise<TokenResponse> => {

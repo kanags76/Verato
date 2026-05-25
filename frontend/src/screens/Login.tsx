@@ -110,6 +110,11 @@ export const Login = () => {
 
         <p className="text-center mt-8 text-slate-500 text-sm font-medium">
           New to the platform? <Link to="/register" className="text-blue-600 font-bold hover:underline">Create an Account</Link>
+          <span className="mx-2 text-slate-300">|</span>
+          <Link to="/activate" className="text-blue-600 font-bold hover:underline">Activate Account</Link>
+        </p>
+        <p className="text-center mt-4 text-slate-500 text-xs font-medium">
+          By signing in, you agree to our <a href="https://twocents.ai/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Terms of Service</a> and <a href="https://twocents.ai/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Privacy Policy</a>.
         </p>
         <p className="text-center mt-4 text-slate-400 text-xs font-bold uppercase tracking-widest">
           Version {APP_VERSION}

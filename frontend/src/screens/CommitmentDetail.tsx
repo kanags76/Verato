@@ -50,6 +50,8 @@ export const CommitmentDetail = () => {
   const [showConfidenceInfo, setShowConfidenceInfo] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [nudgeMessage, setNudgeMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [showLogUpdateModal, setShowLogUpdateModal] = useState(false);
+  const [logNote, setLogNote] = useState("");
 
   const { data: commitment, isLoading, error } = useQuery({
     queryKey: ['commitment', id],
@@ -163,6 +165,16 @@ export const CommitmentDetail = () => {
   const { data: gmailStatus, isLoading: isLoadingGmail } = useQuery({
     queryKey: ['gmail-status'],
     queryFn: () => gmailService.getStatus(),
+  });
+
+  const logUpdateMutation = useMutation({
+    mutationFn: (response: string) => commitmentService.logUpdate(id!, response),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['commitment', id] });
+      queryClient.invalidateQueries({ queryKey: ['commitment-history', id] });
+      setShowLogUpdateModal(false);
+      setLogNote("");
+    }
   });
 
   const nudgeMutation = useMutation({
@@ -322,6 +334,7 @@ export const CommitmentDetail = () => {
   };
 
   const displayCommitment = commitment || MOCK_COMMITMENTS.find(c => c.id === id) || MOCK_COMMITMENTS[0];
+  const canManage = displayCommitment?.can_manage ?? true;
 
   const isToReview = (c: any) => {
     if (!c) return false;
@@ -498,7 +511,7 @@ export const CommitmentDetail = () => {
           </div>
           
           <div className="flex flex-col gap-2">
-            {!inReview && canEdit && hasChanges && (
+            {!inReview && hasChanges && (
               <Button 
                 className="h-14 px-8 text-base font-black shadow-xl shadow-emerald-500/10 gap-3 bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => updateMutation.mutate({
@@ -510,10 +523,19 @@ export const CommitmentDetail = () => {
                 disabled={updateMutation.isPending}
               >
                 <Save className="w-5 h-5" />
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateMutation.isPending ? 'Saving...' : 'Log Update'}
               </Button>
             )}
-            {inReview ? (
+            
+            <Button 
+              className="h-14 px-8 text-base font-black shadow-xl shadow-slate-500/10 gap-3 bg-white text-slate-900 border border-slate-200 hover:bg-slate-50"
+              onClick={() => setShowLogUpdateModal(true)}
+            >
+              <Plus className="w-5 h-5" />
+              Log an update
+            </Button>
+            
+            {inReview && canManage ? (
               <div className="flex flex-col gap-2">
                 <Button 
                   className="h-14 px-8 text-base font-black shadow-xl shadow-blue-500/10 gap-3"
@@ -553,7 +575,7 @@ export const CommitmentDetail = () => {
               </div>
             )}
 
-            {!inReview && (effectiveStatus !== 'done' && effectiveStatus !== 'deferred' && effectiveStatus !== 'cancelled') && (
+            {!inReview && (effectiveStatus !== 'done' && effectiveStatus !== 'deferred' && effectiveStatus !== 'cancelled') && canManage && (
               <div className="flex flex-col gap-2">
                 <Button
                   onClick={handleNudgeNow}
@@ -587,7 +609,7 @@ export const CommitmentDetail = () => {
             )}
 
             <div className="flex gap-2">
-              {effectiveStatus === 'done' || effectiveStatus === 'deferred' || effectiveStatus === 'cancelled' ? (
+              {canManage && (effectiveStatus === 'done' || effectiveStatus === 'deferred' || effectiveStatus === 'cancelled') ? (
                 <Button 
                   variant="secondary" 
                   className="flex-1 font-bold text-xs h-10 border-slate-200"
@@ -596,7 +618,7 @@ export const CommitmentDetail = () => {
                 >
                   {reopenMutation.isPending ? 'Opening...' : 'Reopen'}
                 </Button>
-              ) : !inReview && (
+              ) : canManage && !inReview && (
                 <>
                   <Button 
                     variant="secondary" 
@@ -1122,6 +1144,31 @@ export const CommitmentDetail = () => {
           </motion.div>
         </div>
       )}
+
+        {/* Log Update Modal */}
+        {showLogUpdateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl space-y-6">
+              <h2 className="text-xl font-black text-slate-900">Log an update</h2>
+              <textarea
+                className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="What is the latest update on this commitment?"
+                value={logNote}
+                onChange={(e) => setLogNote(e.target.value)}
+              />
+              <div className="flex gap-3">
+                <Button variant="secondary" className="flex-1" onClick={() => setShowLogUpdateModal(false)}>Cancel</Button>
+                <Button 
+                  className="flex-1" 
+                  onClick={() => logUpdateMutation.mutate(logNote)}
+                  disabled={!logNote.trim() || logUpdateMutation.isPending}
+                >
+                  {logUpdateMutation.isPending ? 'Logging...' : 'Submit'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
     </>
   );
 };
