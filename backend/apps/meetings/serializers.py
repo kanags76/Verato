@@ -28,8 +28,9 @@ class MeetingSerializer(serializers.ModelSerializer):
     topics           = MeetingTopicSerializer(many=True, read_only=True)
     commitment_count = serializers.SerializerMethodField()
     pending_count    = serializers.SerializerMethodField()
-
-    source_file_url = serializers.SerializerMethodField()
+    source_file_url  = serializers.SerializerMethodField()
+    created_by_id    = serializers.SerializerMethodField()
+    created_by_name  = serializers.SerializerMethodField()
 
     class Meta:
         model = Meeting
@@ -39,12 +40,23 @@ class MeetingSerializer(serializers.ModelSerializer):
             'processing_status', 'processed_at', 'processing_error',
             'word_count', 'external_id', 'external_url', 'created_at',
             'commitment_count', 'pending_count', 'source_file_url',
+            'created_by_id', 'created_by_name',
         ]
         read_only_fields = [
             'id', 'processing_status', 'processed_at',
             'processing_error', 'word_count', 'created_at',
             'topics', 'commitment_count', 'pending_count', 'source_file_url',
+            'created_by_id', 'created_by_name',
         ]
+
+    def get_created_by_id(self, obj):
+        return str(obj.created_by_id) if obj.created_by_id else None
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by_id:
+            return None
+        user = obj.created_by
+        return user.get_full_name() or user.email
 
     def get_source_file_url(self, obj):
         if not obj.source_file:
