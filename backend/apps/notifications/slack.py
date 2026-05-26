@@ -35,16 +35,18 @@ def _get_client(org=None):
     return WebClient(token=token)
 
 
-def send_nudge_dm(slack_user_id: str, commitment, nudge_type: str = 'first_reminder') -> str | None:
+def send_nudge_dm(slack_user_id: str, commitment, nudge_type: str = 'first_reminder') -> tuple[str, str] | tuple[None, None]:
     """
     Send a nudge DM to the commitment owner.
-    nudge_type controls the header text. Returns Slack channel id or None.
+    nudge_type controls the header text.
+    Returns (channel, message_ts) so the caller can store them for reply polling.
+    Returns (None, None) on failure or when Slack is not configured.
     """
     org = getattr(commitment, 'organisation', None)
     client = _get_client(org=org)
     if client is None:
         logger.info("Slack not configured — skipping nudge for commitment %s", commitment.id)
-        return None
+        return None, None
 
     deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'no deadline'
     header = _NUDGE_HEADERS.get(nudge_type, '📋 *Commitment reminder*')
@@ -83,14 +85,23 @@ def send_nudge_dm(slack_user_id: str, commitment, nudge_type: str = 'first_remin
                 },
             ],
         },
+        {
+            'type': 'context',
+            'elements': [
+                {
+                    'type': 'mrkdwn',
+                    'text': '💬 You can also _reply to this message_ with an update — Verato will pick it up automatically.',
+                }
+            ],
+        },
     ]
 
     try:
         response = client.chat_postMessage(channel=slack_user_id, blocks=blocks)
-        return response['channel']
+        return response['channel'], response['ts']
     except Exception as exc:
         logger.error("Slack nudge DM failed for %s: %s", slack_user_id, exc)
-        return None
+        return None, None
 
 
 def send_cos_overdue_alert(commitment, cos_slack_user_id: str) -> None:

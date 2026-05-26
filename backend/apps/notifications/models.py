@@ -29,6 +29,7 @@ class NudgeLog(models.Model):
 
     gmail_thread_id           = models.CharField(max_length=32, blank=True)
     last_reply_message_id     = models.CharField(max_length=32, blank=True)
+    slack_message_ts          = models.CharField(max_length=32, blank=True)
 
     class Meta:
         db_table        = 'notifications_nudgelog'

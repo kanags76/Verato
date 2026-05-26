@@ -29,4 +29,8 @@ app.conf.beat_schedule = {
         'task':     'apps.notifications.tasks.sync_calendar_events',
         'schedule': crontab(minute='*/15'),  # every 15 min — picks up new Meet events
     },
+    'poll-slack-replies': {
+        'task':     'apps.notifications.tasks.poll_slack_replies',
+        'schedule': crontab(minute='*/15'),  # every 15 min — checks Slack DM threads for owner replies
+    },
 }

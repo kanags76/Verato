@@ -75,11 +75,11 @@ def send_deadline_nudges():
                 if not created:
                     continue  # already sent for this type
 
-                channel = send_nudge_dm(owner.slack_user_id, commitment, nudge_type)
+                channel, message_ts = send_nudge_dm(owner.slack_user_id, commitment, nudge_type)
                 if channel:
                     NudgeLog.objects.filter(
                         commitment=commitment, nudge_type=nudge_type
-                    ).update(channel=channel)
+                    ).update(channel=channel, slack_message_ts=message_ts or '')
 
                 CommitmentEvent.objects.create(
                     commitment=commitment,
@@ -345,6 +345,134 @@ def poll_gmail_replies():
         poll_log.save()
 
     logger.info("poll_gmail_replies: %d commitments updated across all orgs", total_updated)
+    return {'commitments_updated': total_updated}
+
+
+@shared_task
+def poll_slack_replies():
+    """
+    Every 15 min — check Slack DM threads for replies to nudge messages.
+    For each NudgeLog that has a channel + slack_message_ts and whose commitment
+    is still open, call conversations.replies and parse any new reply with Gemini.
+    Mirrors poll_gmail_replies: same Gemini parser, same CommitmentEvent + notification pattern.
+    """
+    from apps.accounts.models import Organisation
+    from .gmail import parse_reply_with_gemini
+    from .slack import _get_client
+
+    _SKIP_STATUSES = {Commitment.Status.DELIVERED, Commitment.Status.CANCELLED}
+    total_updated = 0
+
+    for org in Organisation.objects.all():
+        client = _get_client(org=org)
+        if client is None:
+            continue
+
+        nudge_logs = (
+            NudgeLog.objects
+            .filter(
+                commitment__organisation=org,
+                slack_message_ts__gt='',
+                channel__gt='',
+            )
+            .exclude(commitment__status__in=_SKIP_STATUSES)
+            .select_related(
+                'commitment__owner',
+                'commitment__meeting__created_by',
+                'commitment__organisation',
+            )
+        )
+
+        for nl in nudge_logs:
+            commitment = nl.commitment
+            if commitment.status in _SKIP_STATUSES:
+                continue
+
+            try:
+                resp = client.conversations_replies(
+                    channel=nl.channel,
+                    ts=nl.slack_message_ts,
+                )
+                messages = resp.get('messages', [])
+            except Exception as exc:
+                logger.error("poll_slack_replies: conversations.replies failed for org %s: %s", org.slug, exc)
+                continue
+
+            # messages[0] is the original bot nudge — skip it; rest are user replies
+            for msg in messages[1:]:
+                msg_ts = msg.get('ts', '')
+                if not msg_ts:
+                    continue
+                # Skip already-processed messages (Slack ts is lexicographically sortable)
+                if nl.last_reply_message_id and msg_ts <= nl.last_reply_message_id:
+                    continue
+                # Skip bot messages and system subtypes
+                if msg.get('bot_id') or msg.get('subtype'):
+                    continue
+
+                reply_body = msg.get('text', '').strip()
+                if not reply_body:
+                    continue
+
+                deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'none'
+                parsed = parse_reply_with_gemini(commitment.normalised_text, deadline_str, reply_body)
+
+                intent   = parsed.get('intent', 'no_update')
+                note     = parsed.get('note', reply_body[:200])
+                new_date = parsed.get('suggested_deadline')
+
+                status_map = {
+                    'done':     Commitment.Status.DELIVERED,
+                    'deferred': Commitment.Status.DEFERRED,
+                    'blocked':  Commitment.Status.AT_RISK,
+                    'active':   Commitment.Status.ACTIVE,
+                }
+                new_status = status_map.get(intent)
+
+                update_fields = ['updated_at']
+                if new_status and new_status != commitment.status:
+                    commitment.status = new_status
+                    update_fields.append('status')
+                if new_date:
+                    import datetime
+                    try:
+                        commitment.deadline = datetime.date.fromisoformat(new_date)
+                        update_fields.append('deadline')
+                    except ValueError:
+                        pass
+                if len(update_fields) > 1:
+                    commitment.save(update_fields=update_fields)
+
+                CommitmentEvent.objects.create(
+                    commitment=commitment,
+                    event_type=CommitmentEvent.EventType.FIELD_EDITED,
+                    note=f'[Slack reply — auto-parsed] {note}',
+                    new_value={'intent': intent, 'suggested_deadline': new_date},
+                )
+
+                owner      = commitment.owner
+                owner_name = owner.name if owner else 'Owner'
+                intent_label = {
+                    'done':     'marked it Done',
+                    'deferred': 'requested a deadline extension',
+                    'blocked':  'reported a blocker',
+                }.get(intent, f'replied ({intent})')
+
+                from apps.notifications.views import create_cos_notification
+                cos_user = getattr(getattr(commitment, 'meeting', None), 'created_by', None)
+                create_cos_notification(
+                    org, commitment,
+                    f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via Slack reply.',
+                    'slack_reply',
+                    recipient_user=cos_user,
+                )
+
+                nl.last_reply_message_id = msg_ts
+                nl.save(update_fields=['last_reply_message_id'])
+                total_updated += 1
+                break  # one reply processed per nudge log per poll cycle
+
+    logger.info("poll_slack_replies: %d commitments updated", total_updated)
     return {'commitments_updated': total_updated}
 
 
