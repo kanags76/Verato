@@ -55,6 +55,7 @@ class CommitmentSerializer(serializers.ModelSerializer):
     needs_manual_nudge = serializers.SerializerMethodField()
     urgency            = serializers.SerializerMethodField()
     can_manage         = serializers.SerializerMethodField()
+    risk_breakdown     = serializers.SerializerMethodField()
     tags               = TagsField(required=False)
     escalations        = EscalationEventSerializer(many=True, read_only=True)
 
@@ -70,6 +71,7 @@ class CommitmentSerializer(serializers.ModelSerializer):
             'status', 'risk_score', 'is_overdue',
             'needs_manual_nudge', 'urgency',
             'can_manage',
+            'risk_breakdown',
             'reviewed_at', 'resolved_at', 'resolution_note',
             'escalations',
             'created_at', 'updated_at',
@@ -114,6 +116,10 @@ class CommitmentSerializer(serializers.ModelSerializer):
         if not obj.deadline:
             return False
         return not obj.owner or not obj.owner.slack_user_id
+
+    def get_risk_breakdown(self, obj):
+        from .risk import compute_risk_breakdown
+        return compute_risk_breakdown(obj)
 
     def get_urgency(self, obj):
         if not obj.deadline:
