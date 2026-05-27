@@ -309,22 +309,30 @@ def poll_gmail_replies():
                 CommitmentEvent.objects.create(
                     commitment=commitment,
                     event_type=CommitmentEvent.EventType.FIELD_EDITED,
-                    note=f'[Gmail reply — auto-parsed] {note}',
-                    new_value={'intent': intent, 'suggested_deadline': new_date},
+                    note=f'[Gmail reply] {reply_body}',
+                    new_value={'intent': intent, 'suggested_deadline': new_date, 'reply': reply_body},
                 )
 
                 owner      = commitment.owner
                 owner_name = owner.name if owner else 'Owner'
-                intent_label = {
-                    'done':     'marked it Done',
-                    'deferred': 'requested a deadline extension',
-                    'blocked':  'reported a blocker',
-                }.get(intent, f'replied ({intent})')
                 from apps.notifications.views import create_cos_notification
                 cos_user = getattr(getattr(commitment, 'meeting', None), 'created_by', None)
+                if intent == 'no_update':
+                    notif_message = (
+                        f'{owner_name} replied to your nudge on "{commitment.normalised_text[:80]}" — '
+                        f'I was unable to determine a status update. Marked for your review.\n\n'
+                        f'Their reply: "{reply_body[:300]}"'
+                    )
+                else:
+                    intent_label = {
+                        'done':     'marked it Done',
+                        'deferred': 'requested a deadline extension',
+                        'blocked':  'reported a blocker',
+                    }.get(intent, f'updated the status to {intent}')
+                    notif_message = f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via email.'
                 create_cos_notification(
                     org, commitment,
-                    f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via email.',
+                    notif_message,
                     'gmail_reply',
                     recipient_user=cos_user,
                 )
@@ -446,23 +454,30 @@ def poll_slack_replies():
                 CommitmentEvent.objects.create(
                     commitment=commitment,
                     event_type=CommitmentEvent.EventType.FIELD_EDITED,
-                    note=f'[Slack reply — auto-parsed] {note}',
-                    new_value={'intent': intent, 'suggested_deadline': new_date},
+                    note=f'[Slack reply] {reply_body}',
+                    new_value={'intent': intent, 'suggested_deadline': new_date, 'reply': reply_body},
                 )
 
                 owner      = commitment.owner
                 owner_name = owner.name if owner else 'Owner'
-                intent_label = {
-                    'done':     'marked it Done',
-                    'deferred': 'requested a deadline extension',
-                    'blocked':  'reported a blocker',
-                }.get(intent, f'replied ({intent})')
-
                 from apps.notifications.views import create_cos_notification
                 cos_user = getattr(getattr(commitment, 'meeting', None), 'created_by', None)
+                if intent == 'no_update':
+                    notif_message = (
+                        f'{owner_name} replied to your nudge on "{commitment.normalised_text[:80]}" — '
+                        f'I was unable to determine a status update. Marked for your review.\n\n'
+                        f'Their reply: "{reply_body[:300]}"'
+                    )
+                else:
+                    intent_label = {
+                        'done':     'marked it Done',
+                        'deferred': 'requested a deadline extension',
+                        'blocked':  'reported a blocker',
+                    }.get(intent, f'updated the status to {intent}')
+                    notif_message = f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via Slack.'
                 create_cos_notification(
                     org, commitment,
-                    f'{owner_name} {intent_label} on "{commitment.normalised_text[:80]}" via Slack reply.',
+                    notif_message,
                     'slack_reply',
                     recipient_user=cos_user,
                 )
