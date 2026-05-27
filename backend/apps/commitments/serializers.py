@@ -20,6 +20,18 @@ class CommitmentTagSerializer(serializers.ModelSerializer):
         fields = ['label']
 
 
+class CommitmentTagDetailSerializer(serializers.ModelSerializer):
+    usage = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = CommitmentTag
+        fields = [
+            'id', 'label', 'is_initiative', 'description',
+            'ai_summary', 'ai_summary_at', 'created_at', 'usage',
+        ]
+        read_only_fields = ['id', 'ai_summary', 'ai_summary_at', 'created_at', 'usage']
+
+
 class EscalationEventSerializer(serializers.ModelSerializer):
     escalated_by_name = serializers.SerializerMethodField()
     escalated_to_name = serializers.SerializerMethodField()

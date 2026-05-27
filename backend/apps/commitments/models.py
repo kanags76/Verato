@@ -9,12 +9,17 @@ class CommitmentTag(models.Model):
     """
     Thematic tags applied to individual commitments. Deduplicated per org —
     one record shared across all commitments with the same label.
-    These are the edges in the Phase 2 person knowledge graph.
+    When is_initiative=True the tag is promoted to a Strategic Initiative —
+    it gets a description, a rolled-up risk summary, and an AI-generated summary.
     """
-    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='commitment_tags')
-    label        = models.CharField(max_length=255)
-    created_at   = models.DateTimeField(auto_now_add=True)
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organisation   = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='commitment_tags')
+    label          = models.CharField(max_length=255)
+    is_initiative  = models.BooleanField(default=False)
+    description    = models.TextField(blank=True)
+    ai_summary     = models.TextField(blank=True)
+    ai_summary_at  = models.DateTimeField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.label
@@ -24,6 +29,7 @@ class CommitmentTag(models.Model):
         unique_together = [['organisation', 'label']]
         indexes = [
             models.Index(fields=['organisation', 'label']),
+            models.Index(fields=['organisation', 'is_initiative']),
         ]
 
 

@@ -10,7 +10,7 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from drf_spectacular.types import OpenApiTypes
 
 from .models import Commitment, CommitmentEvent, CommitmentTag, EscalationEvent, ExtractionFeedback
-from .serializers import CommitmentSerializer, CommitmentEventSerializer, ResolveSerializer
+from .serializers import CommitmentSerializer, CommitmentEventSerializer, ResolveSerializer, CommitmentTagDetailSerializer
 from apps.accounts.models import MeetingManager
 from apps.accounts.views import get_user_org
 from apps.meetings.models import Meeting
@@ -539,6 +539,55 @@ class CommitmentViewSet(
              new_value={'status': 'active'})
         return Response(_serialize_commitment(commitment, request))
 
+    @action(detail=True, methods=['post'], url_path='auto-tag')
+    def auto_tag(self, request, pk=None):
+        """Use Gemini to suggest and apply tags for this commitment."""
+        commitment = self.get_object()
+        if not _has_cos_access(request.user, commitment.meeting):
+            return Response({'detail': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        org = commitment.organisation
+        existing_labels = list(
+            CommitmentTag.objects.filter(organisation=org)
+            .values_list('label', flat=True)
+            .order_by('label')
+        )
+
+        from extraction.extractor import _call_gemini
+        existing_str = ', '.join(existing_labels) if existing_labels else '(none yet)'
+        prompt = (
+            f'You are a tagging assistant for an executive commitment tracker.\n\n'
+            f'Commitment: "{commitment.normalised_text}"\n\n'
+            f'Existing tags in this organisation: {existing_str}\n\n'
+            f'Return a JSON array of 1-4 lowercase tag labels that best categorise this commitment. '
+            f'Reuse existing tags where appropriate. Only create a new tag if the commitment clearly '
+            f'belongs to a theme not covered by existing tags. Keep labels short (1-3 words). '
+            f'Return ONLY the JSON array, nothing else. Example: ["product", "q2 roadmap"]'
+        )
+        raw = _call_gemini(prompt)
+        if not raw:
+            return Response({'detail': 'AI tagging unavailable right now.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        import json
+        try:
+            raw = raw.strip()
+            if raw.startswith('```'):
+                raw = raw.split('\n', 1)[-1].rsplit('```', 1)[0].strip()
+            suggested = json.loads(raw)
+            if not isinstance(suggested, list):
+                raise ValueError('not a list')
+            suggested = [str(s).lower().strip() for s in suggested if str(s).strip()][:4]
+        except (json.JSONDecodeError, ValueError):
+            return Response({'detail': 'Could not parse AI response.', 'raw': raw}, status=status.HTTP_502_BAD_GATEWAY)
+
+        for label in suggested:
+            tag, _ = CommitmentTag.objects.get_or_create(organisation=org, label=label)
+            commitment.tags.add(tag)
+
+        _log(commitment, CommitmentEvent.EventType.FIELD_EDITED, _get_actor(request),
+             note=f'Auto-tagged: {", ".join(suggested)}')
+        return Response({'applied_tags': suggested, **_serialize_commitment(commitment, request)})
+
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
         commitment = self.get_object()
@@ -588,7 +637,7 @@ class CommitmentViewSet(
         return Response(events)
 
 
-# ── Tag autocomplete ──────────────────────────────────────────────────────────
+# ── Tags ──────────────────────────────────────────────────────────────────────
 
 @extend_schema(
     tags=['tags'],
@@ -613,4 +662,161 @@ def tag_list(request):
     if q:
         qs = qs.filter(label__istartswith=q)
 
-    return Response([{'label': t.label, 'usage': t.usage} for t in qs])
+    return Response(CommitmentTagDetailSerializer(qs, many=True).data)
+
+
+class CommitmentTagViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """CRUD management for org tags (rename, promote to initiative, delete, merge)."""
+    serializer_class = CommitmentTagDetailSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'patch', 'delete', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        org = get_user_org(self.request)
+        if org is None:
+            return CommitmentTag.objects.none()
+        return (
+            CommitmentTag.objects
+            .filter(organisation=org)
+            .annotate(usage=Count('commitments'))
+        )
+
+    def _require_admin(self):
+        if not self.request.user.is_org_admin:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Only org admins can manage tags.')
+
+    def partial_update(self, request, *args, **kwargs):
+        self._require_admin()
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        self._require_admin()
+        tag = self.get_object()
+        label = tag.label
+        tag.delete()
+        return Response({'detail': f'Tag "{label}" deleted.'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def merge(self, request, pk=None):
+        """Merge this tag into another: all commitments re-tagged, this tag deleted."""
+        self._require_admin()
+        source_tag = self.get_object()
+        target_label = (request.data.get('into') or '').strip().lower()
+        if not target_label:
+            return Response({'detail': '"into" (target tag label) is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if target_label == source_tag.label:
+            return Response({'detail': 'Source and target tags must be different.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        org = get_user_org(request)
+        target_tag, _ = CommitmentTag.objects.get_or_create(organisation=org, label=target_label)
+
+        affected_commitments = source_tag.commitments.all()
+        for c in affected_commitments:
+            c.tags.add(target_tag)
+            c.tags.remove(source_tag)
+
+        count = affected_commitments.count()
+        source_tag.delete()
+        return Response({
+            'detail': f'Merged "{source_tag.label}" into "{target_label}".',
+            'commitments_updated': count,
+        })
+
+    @action(detail=True, methods=['post'], url_path='generate-summary')
+    def generate_summary(self, request, pk=None):
+        """Trigger Gemini to regenerate the AI summary for this initiative tag."""
+        self._require_admin()
+        tag = self.get_object()
+        if not tag.is_initiative:
+            return Response({'detail': 'Only initiative tags can have an AI summary.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        commitments = list(
+            tag.commitments
+            .exclude(status__in=['done', 'cancelled'])
+            .select_related('owner')
+            .values('normalised_text', 'status', 'deadline', 'owner__name')
+        )
+
+        if not commitments:
+            return Response({'detail': 'No active commitments under this initiative.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        lines = []
+        for c in commitments:
+            owner = c['owner__name'] or 'Unassigned'
+            deadline = str(c['deadline']) if c['deadline'] else 'no deadline'
+            lines.append(f'- [{c["status"]}] {c["normalised_text"]} (Owner: {owner}, Due: {deadline})')
+
+        from extraction.extractor import _call_gemini
+        prompt = (
+            f'You are summarising the status of a strategic initiative called "{tag.label}" '
+            f'for a Chief of Staff.\n\n'
+            f'Initiative description: {tag.description or "(none)"}\n\n'
+            f'Active commitments under this initiative:\n' + '\n'.join(lines) + '\n\n'
+            f'Write a 2-3 sentence summary covering: overall health (on track / at risk / blocked), '
+            f'key upcoming deadlines, and any red flags. Be direct and factual. No fluff.'
+        )
+        summary = _call_gemini(prompt)
+        if not summary:
+            return Response({'detail': 'AI summary generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        from django.utils import timezone as tz
+        tag.ai_summary = summary.strip()
+        tag.ai_summary_at = tz.now()
+        tag.save(update_fields=['ai_summary', 'ai_summary_at'])
+
+        qs = CommitmentTag.objects.filter(pk=tag.pk).annotate(usage=Count('commitments'))
+        return Response(CommitmentTagDetailSerializer(qs.first()).data)
+
+
+# ── Initiatives list ──────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['initiatives'],
+    summary='List strategic initiatives with commitment counts by status',
+)
+@api_view(['GET'])
+@drf_permission_classes([IsAuthenticated])
+def initiatives_list(request):
+    org = get_user_org(request)
+    if org is None:
+        return Response([])
+
+    tags = (
+        CommitmentTag.objects
+        .filter(organisation=org, is_initiative=True)
+        .annotate(
+            total=Count('commitments'),
+            active=Count('commitments', filter=Q(commitments__status='active')),
+            at_risk=Count('commitments', filter=Q(commitments__status='at_risk')),
+            escalated=Count('commitments', filter=Q(commitments__status='escalated')),
+            done=Count('commitments', filter=Q(commitments__status='done')),
+            pending=Count('commitments', filter=Q(commitments__status='pending_review')),
+        )
+        .order_by('label')
+    )
+
+    data = []
+    for tag in tags:
+        data.append({
+            'id':           str(tag.id),
+            'label':        tag.label,
+            'description':  tag.description,
+            'ai_summary':   tag.ai_summary,
+            'ai_summary_at': tag.ai_summary_at,
+            'counts': {
+                'total':     tag.total,
+                'active':    tag.active,
+                'at_risk':   tag.at_risk,
+                'escalated': tag.escalated,
+                'done':      tag.done,
+                'pending':   tag.pending,
+            },
+        })
+
+    return Response(data)
