@@ -19,7 +19,7 @@ import { APP_VERSION } from "../../types";
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Calendar, label: "Meetings", path: "/meetings" },
-  { icon: Users, label: "People", path: "/people" },
+  { icon: Users, label: "Directory", path: "/people" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 

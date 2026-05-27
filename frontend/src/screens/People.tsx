@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { personService, slackService } from "@/src/lib/api/services";
@@ -14,7 +14,8 @@ import {
   X, 
   Merge, 
   Check, 
-  UserPlus
+  UserPlus,
+  ChevronDown
 } from "lucide-react";
 import { Card } from "@/src/components/ui/Card";
 import { Avatar } from "@/src/components/ui/Avatar";
@@ -35,6 +36,18 @@ export const People = () => {
   const [showSlackImportModal, setShowSlackImportModal] = useState(false);
   const [selectedPersonToLink, setSelectedPersonToLink] = useState<any | null>(null);
   const [isManualLinkOpen, setIsManualLinkOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const { data: slackStatus } = useQuery({
     queryKey: ['slack-status'],
@@ -150,8 +163,8 @@ export const People = () => {
     <div className="max-w-7xl mx-auto space-y-8 pb-20 px-4 md:px-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-2">People</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Manage stakeholders and project contributors identified from transcripts.</p>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-2">Directory</h1>
+          <p className="text-slate-500 font-medium tracking-tight">Everyone who makes commitments in your meetings. They receive nudges — they don't need a Verato account.</p>
         </div>
         
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 w-full">
@@ -165,24 +178,35 @@ export const People = () => {
               className="bg-white border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-full shadow-sm font-bold"
             />
           </div>
-          <div className="flex flex-wrap items-stretch gap-2.5">
-            <Button 
-              variant="secondary" 
-              className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0 justify-center px-4 animate-duration-100"
-              onClick={() => setShowSlackImportModal(true)}
-              disabled={!slackStatus?.connected}
-            >
-              <Slack className="w-4 h-4 text-[#4A154B]" />
-              <span>Link/Import People</span>
-            </Button>
+          <div className="relative" ref={dropdownRef}>
             <Button 
               variant="secondary" 
               className="rounded-2xl h-[42px] border-slate-200 font-bold gap-2 hover:bg-slate-50 transition-colors shrink-0 justify-center px-4"
-              onClick={() => setShowAddModal(true)}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Person</span>
+              <span>Add to Directory</span>
+              <ChevronDown className="w-4 h-4" />
             </Button>
+            {isDropdownOpen && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-lg border border-slate-100 z-50 overflow-hidden"
+              >
+                <div 
+                  className="px-5 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 cursor-pointer"
+                  onClick={() => { setShowAddModal(true); setIsDropdownOpen(false); }}
+                >
+                  Add Manually
+                </div>
+                <div 
+                  className="px-5 py-3 hover:bg-slate-50 font-bold text-sm text-slate-700 cursor-pointer"
+                  onClick={() => { setShowSlackImportModal(true); setIsDropdownOpen(false); }}
+                >
+                  Import from Slack Workspace
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -321,7 +345,7 @@ export const People = () => {
               <Users className="w-10 h-10 text-slate-300" />
             </div>
             <h3 className="text-xl font-black text-slate-900 mb-2">No people found</h3>
-            <p className="text-slate-500 font-bold max-w-xs mx-auto">Try adjusting your filters or upload more transcripts to identify stakeholders.</p>
+            <p className="text-slate-500 font-bold max-w-xs mx-auto">No one in your directory yet. Upload a meeting and Verato will identify action owners automatically — or add them manually.</p>
           </div>
         )}
 
@@ -392,7 +416,14 @@ export const People = () => {
                         </div>
                       ) : (
                         <>
-                          <h3 className="text-lg font-black text-slate-900 leading-tight group-hover:text-blue-600 transition-colors">{person.name}</h3>
+                          <div className="flex items-center gap-2">
+                             <h3 className="text-lg font-black text-slate-900 leading-tight group-hover:text-blue-600 transition-colors">{person.name}</h3>
+                             {person.user_id && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5 whitespace-nowrap">
+                                  ● Verato User
+                                </span>
+                             )}
+                          </div>
                           <div className="space-y-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{person.role || person.title || "No role specified"}</p>
                             {person.email ? (

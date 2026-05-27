@@ -419,3 +419,28 @@ export const managerService = {
   },
 };
 
+export interface Invitation {
+  id: string;
+  email: string;
+  status: 'pending' | 'accepted' | 'expired';
+  expires_at: string;
+  created_at: string;
+}
+
+export const inviteService = {
+  send: async (email: string): Promise<{ detail: string }> => {
+    const { data } = await apiClient.post('auth/invite/', { email });
+    return data;
+  },
+  list: async (): Promise<Invitation[]> => {
+    const { data } = await apiClient.get<Invitation[]>('auth/invitations/');
+    return Array.isArray(data) ? data : [];
+  },
+  resend: async (id: string): Promise<void> => {
+    await apiClient.post(`auth/invitations/${id}/resend/`);
+  },
+  revoke: async (id: string): Promise<void> => {
+    await apiClient.delete(`auth/invitations/${id}/revoke/`);
+  },
+};
+

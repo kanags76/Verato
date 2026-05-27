@@ -21,13 +21,14 @@ import {
   Loader2,
   Building2
 } from "lucide-react";
+import { NotificationsSettings } from "@/src/components/NotificationsSettings";
 import { Card } from "@/src/components/ui/Card";
 import { Button } from "@/src/components/ui/Button";
 import { Badge } from "@/src/components/ui/Badge";
 import { Avatar } from "@/src/components/ui/Avatar";
 import { cn } from "@/src/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { slackService, importService, nudgeSettingsService, gmailService, calendarService, zoomService, managerService } from "@/src/lib/api/services";
+import { slackService, importService, nudgeSettingsService, gmailService, calendarService, zoomService, managerService, inviteService } from "@/src/lib/api/services";
 import { authService } from "@/src/lib/api/auth";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
@@ -43,19 +44,52 @@ export const Settings = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSuccessOpen, setIsSuccessOpen] = useState(false);
   const [isSlackImportOpen, setIsSlackImportOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<'organization' | 'integrations' | 'notifications' | 'delegation' | 'data'>('organization');
 
   const { data: profile, isLoading: isLoadingProfile } = useQuery({
     queryKey: ['user-profile'],
     queryFn: () => authService.getProfile(),
   });
 
+  const { data: invitations } = useQuery({
+    queryKey: ['invitations'],
+    queryFn: () => inviteService.list(),
+    enabled: !!profile?.is_org_admin,
+  });
+  
   const { data: slackStatus, isLoading: isLoadingSlack } = useQuery({
     queryKey: ['slack-status'],
     queryKeyHashFn: () => 'slack-status',
     queryFn: () => slackService.getStatus(),
   });
 
-  const disconnectMutation = useMutation({
+  const inviteMutation = useMutation({
+    mutationFn: (email: string) => inviteService.send(email),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invitations'] });
+      setInviteEmail('');
+      setInviteError(null);
+    },
+    onError: (err: any) => {
+      setInviteError(err.response?.data?.detail || "Something went wrong. Please try again.");
+    }
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: (id: string) => inviteService.resend(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invitations'] }),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => inviteService.revoke(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invitations'] }),
+  });
+
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const disconnectSlackMutation = useMutation({
     mutationFn: () => slackService.disconnect(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['slack-status'] });
@@ -75,7 +109,7 @@ export const Settings = () => {
     },
   });
 
-  const handleConnect = () => {
+  const handleSlackConnect = () => {
     const API_URL = (import.meta.env.VITE_API_URL || 'https://api.verato.twocents.ai/api/v1').replace(/\/$/, '');
     const token = localStorage.getItem('accessToken');
     const url = `${API_URL}/slack/oauth/start/?auth=${token}`;
@@ -103,7 +137,7 @@ export const Settings = () => {
 
   const handleDisconnect = () => {
     if (window.confirm("Are you sure you want to disconnect Slack? Verato will no longer be able to send automated nudges.")) {
-      disconnectMutation.mutate();
+      disconnectSlackMutation.mutate();
     }
   };
 
@@ -229,436 +263,396 @@ export const Settings = () => {
     }
   };
 
+  const sidebarItems = [
+    { id: 'organization', label: 'Organization & Team', icon: Building2 },
+    { id: 'integrations', label: 'Integrations', icon: Shield },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'delegation', label: 'Delegation', icon: Users },
+    { id: 'data', label: 'Data Import', icon: FileUp },
+  ];
+
   return (
-    <div className="max-w-3xl mx-auto space-y-10 px-4 md:px-0">
-      <div>
-        <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-2 underline decoration-blue-500/50 underline-offset-4 decoration-2">Settings</h1>
-        <p className="text-slate-500 font-bold tracking-tight">Configure your integrations and automated workflows.</p>
-      </div>
+    <>
+      <div className="max-w-6xl mx-auto px-4 md:px-0 py-10">
+        <div className="mb-10">
+          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-2 underline decoration-blue-500/50 underline-offset-4 decoration-2">Settings</h1>
+          <p className="text-slate-500 font-bold tracking-tight">Configure your integrations and automated workflows.</p>
+        </div>
 
-      <div className="space-y-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 bg-blue-600 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-blue-600/30 shrink-0">
-                <Building2 className="w-9 h-9" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Organisation</h2>
-                {isLoadingProfile ? (
-                  <div className="flex items-center gap-2 mt-1 text-slate-400 font-bold text-sm">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Loading...
+        <div className="flex flex-wrap gap-2 mb-10 border-b border-slate-200 pb-2">
+          {sidebarItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveCategory(item.id as any)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 font-bold text-sm transition-all border-b-2",
+                activeCategory === item.id
+                  ? "text-blue-700 border-blue-600"
+                  : "text-slate-600 border-transparent hover:text-slate-900"
+              )}
+            >
+              <item.icon className="w-4 h-4" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <main className="space-y-8">
+          {activeCategory === 'organization' && (
+            <div className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-blue-600 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-blue-600/30 shrink-0">
+                      <Building2 className="w-9 h-9" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Organisation</h2>
+                      {isLoadingProfile ? (
+                        <div className="flex items-center gap-2 mt-1 text-slate-400 font-bold text-sm">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Loading...
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 text-lg font-bold leading-relaxed">{profile?.organisation?.name || "No organisation specified"}</p>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-slate-500 text-lg font-bold leading-relaxed">{profile?.organisation?.name || "No organisation specified"}</p>
-                )}
-              </div>
+                </Card>
+              </motion.div>
+
+              {profile?.is_org_admin && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                    <div className="mb-8">
+                      <h2 className="text-xl font-black text-slate-900">Invite a Team Member</h2>
+                      <p className="text-slate-500 font-medium text-sm">Team members get a Verato account and can log in to manage commitments.</p>
+                    </div>
+                    
+                    <div className="flex gap-3 mb-8">
+                      <input 
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="email@example.com"
+                        className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-bold text-sm"
+                      />
+                      <Button 
+                        onClick={() => inviteMutation.mutate(inviteEmail)}
+                        disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                        className="h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black px-6 border-none disabled:opacity-50"
+                      >
+                        {inviteMutation.isPending ? "Sending..." : "Send Invite"}
+                      </Button>
+                    </div>
+                    {inviteError && <p className="text-red-500 text-xs font-bold mt-1 ml-1">{inviteError}</p>}
+
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Pending Invitations</h3>
+                      {invitations?.filter(inv => inv.status === 'pending' || inv.status === 'expired').length === 0 ? (
+                        <p className="text-slate-400 font-bold text-sm text-center py-8">No pending invitations. Invite a colleague above.</p>
+                      ) : (
+                        invitations?.filter(inv => inv.status === 'pending' || inv.status === 'expired').map(inv => (
+                          <div key={inv.id} className="group flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                            <div>
+                              <p className="font-black text-slate-900">{inv.email}</p>
+                              <p className="text-xs text-slate-500 font-bold">{new Date(inv.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className={cn(
+                                "text-[10px] font-black uppercase tracking-widest rounded-full px-3 py-0.5 border",
+                                inv.status === 'pending' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-400 border-slate-200"
+                              )}>
+                                {inv.status}
+                              </span>
+                              
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="secondary" size="sm" className="h-9 rounded-xl border border-slate-200 font-bold text-sm px-4" onClick={() => resendMutation.mutate(inv.id)}>Resend</Button>
+                                {revokingId === inv.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold">Are you sure?</span>
+                                    <Button variant="ghost" size="sm" className="text-red-500 font-bold text-sm" onClick={() => revokeMutation.mutate(inv.id)}>Yes, revoke</Button>
+                                    <Button variant="ghost" size="sm" className="font-bold text-sm text-slate-500" onClick={() => setRevokingId(null)}>Cancel</Button>
+                                  </div>
+                                ) : (
+                                  <Button variant="ghost" size="sm" className="text-red-500 font-bold text-sm" onClick={() => setRevokingId(inv.id)}>Revoke</Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
             </div>
-          </Card>
-        </motion.div>
+          )}
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-6">
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex flex-col md:flex-row items-start justify-between mb-10 gap-6">
-              <div className="flex gap-6">
-                <div className="w-16 h-16 bg-slate-900 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-slate-900/30 shrink-0">
-                  <Slack className="w-9 h-9" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">Slack Connection</h2>
-                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Verato sends automated nudges to stakeholders via direct message to ensure accountability.</p>
-                  
-                  {isLoadingSlack ? (
-                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Checking Status...
+          {activeCategory === 'integrations' && (
+            <div className="space-y-6">            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-6">
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className="w-16 h-16 bg-[#4A154B]/10 rounded-[20px] flex items-center justify-center text-[#4A154B] shadow-2xl shadow-[#4A154B]/10 shrink-0">
+                      <svg viewBox="0 0 24 24" className="w-9 h-9 fill-current"><path d="M5.04 15.174a1.838 1.838 0 1 0-.008 3.676 1.838 1.838 0 0 0 .008-3.676zm0-5.513a1.838 1.838 0 1 0-.008 3.676 1.838 1.838 0 0 0 .008-3.676zM10.553 5.04a1.838 1.838 0 1 0 3.676.008 1.838 1.838 0 0 0-3.676-.008zm5.513 0a1.838 1.838 0 1 0 3.676.008 1.838 1.838 0 0 0-3.676-.008zM18.96 8.826a1.838 1.838 0 1 0 .008 3.676 1.838 1.838 0 0 0-.008-3.676zm0 5.513a1.838 1.838 0 1 0 .008 3.676 1.838 1.838 0 0 0-.008-3.676zM13.447 18.96a1.838 1.838 0 1 0-3.676-.008 1.838 1.838 0 0 0 3.676.008zm-5.513 0a1.838 1.838 0 1 0-3.676-.008 1.838 1.838 0 0 0 3.676.008zM7.348 7.348h9.304v9.304H7.348V7.348z"/></svg>
                     </div>
-                  ) : slackStatus?.connected ? (
-                    <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
-                       <CheckCircle2 className="w-3.5 h-3.5" />
-                       Status: Connected to {slackStatus.workspace_name || "Workspace"}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
-                       <AlertCircle className="w-3.5 h-3.5" />
-                       Status: Disconnected
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                <Button 
-                  variant="secondary" 
-                  onClick={() => setIsSlackImportOpen(true)}
-                  disabled={!slackStatus?.connected}
-                  className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-slate-50 text-slate-700 transition-all shrink-0 flex items-center justify-center gap-2"
-                >
-                  <Slack className="w-4 h-4 text-[#4A154B]" />
-                  <span>Link/Import People</span>
-                </Button>
-
-                {slackStatus?.connected ? (
-                  <Button 
-                    variant="secondary" 
-                    onClick={handleDisconnect}
-                    disabled={disconnectMutation.isPending}
-                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
-                  >
-                    {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleConnect}
-                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
-                  >
-                    Connect Slack
-                  </Button>
-                )}
-              </div>
-            </div>
-
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="space-y-6">
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
-              <div className="flex gap-6">
-                <div className="w-16 h-16 bg-red-600 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-red-600/30 shrink-0">
-                  <Mail className="w-9 h-9" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">Gmail Connection</h2>
-                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect Gmail to synchronize emails and automate your Chief of Staff workflow directly from your inbox.</p>
-                  
-                  {isLoadingGmail ? (
-                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Checking Status...
-                    </div>
-                  ) : gmailStatus?.connected ? (
-                    <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
-                       <CheckCircle2 className="w-3.5 h-3.5" />
-                       Status: Connected as {gmailStatus.email}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
-                       <AlertCircle className="w-3.5 h-3.5" />
-                       Status: Disconnected
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                {gmailStatus?.connected ? (
-                  <Button 
-                    variant="secondary" 
-                    onClick={handleGmailDisconnect}
-                    disabled={disconnectGmailMutation.isPending}
-                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
-                  >
-                    {disconnectGmailMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleGmailConnect}
-                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
-                  >
-                    Connect Gmail
-                  </Button>
-                )}
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="space-y-6">
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
-              <div className="flex gap-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
-                  <Video className="w-9 h-9" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">Zoom</h2>
-                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Zoom account to synchronize meetings.</p>
-                  
-                  {isLoadingZoom ? (
-                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Checking Status...
-                    </div>
-                  ) : zoomStatus?.connected ? (
-                    <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Status: Connected as {zoomStatus.email}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Status: Disconnected
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                {zoomStatus?.connected ? (
-                  <Button 
-                    variant="secondary" 
-                    onClick={() => disconnectZoomMutation.mutate()}
-                    disabled={disconnectZoomMutation.isPending}
-                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
-                  >
-                    {disconnectZoomMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleZoomConnect}
-                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
-                  >
-                    Connect Zoom
-                  </Button>
-                )}
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="space-y-6">
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
-              <div className="flex gap-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
-                  <Calendar className="w-9 h-9" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">Google Calendar</h2>
-                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Google Calendar to sync meetings and identify Google Meet links.</p>
-                  
-                  {isLoadingCalendar ? (
-                    <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Checking Status...
-                    </div>
-                  ) : calendarStatus?.connected ? (
-                    <div className="space-y-2 text-left">
-                      <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Status: Connected as {calendarStatus.email}
-                      </div>
-                      {calendarStatus.transcripts_detected === false && (
-                        <div className="flex items-center gap-2 text-amber-700 font-black text-[10px] uppercase tracking-[0.2em] bg-amber-100/50 border border-amber-200 px-3 py-1.5 rounded-xl inline-flex">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        Google Meet transcript recording is disabled.
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Slack</h2>
+                      <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect Slack to receive automated meeting nudges and status updates.</p>
+                      
+                      {isLoadingSlack ? (
+                        <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Checking Status...
+                        </div>
+                      ) : slackStatus?.connected ? (
+                        <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                           <CheckCircle2 className="w-3.5 h-3.5" />
+                           Status: Connected
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                           <AlertCircle className="w-3.5 h-3.5" />
+                           Status: Disconnected
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Status: Disconnected
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    {slackStatus?.connected ? (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => disconnectSlackMutation.mutate()}
+                        disabled={disconnectSlackMutation.isPending}
+                        className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                      >
+                        {disconnectSlackMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={handleSlackConnect}
+                        className="rounded-2xl bg-[#4A154B] text-white px-6 font-bold h-11 hover:bg-[#350d36] transition-all shrink-0 border-none"
+                      >
+                        Connect Slack
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className="w-16 h-16 bg-red-600 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-red-600/30 shrink-0">
+                      <Mail className="w-9 h-9" />
                     </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                {calendarStatus?.connected ? (
-                  <Button 
-                    variant="secondary" 
-                    onClick={() => disconnectCalendarMutation.mutate()}
-                    disabled={disconnectCalendarMutation.isPending}
-                    className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
-                  >
-                    {disconnectCalendarMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                  </Button>
-                ) : (
-                  <Button 
-                    onClick={handleCalendarConnect}
-                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
-                  >
-                    Connect Google Calendar
-                  </Button>
-                )}
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex gap-6 mb-8">
-              <div className="w-16 h-16 bg-purple-50 rounded-[20px] flex items-center justify-center text-[#4A154B] shadow-2xl shadow-purple-500/10 shrink-0">
-                <Bell className="w-9 h-9" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Reminders & Nudges</h2>
-                <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
-                  Configure the automatic Slack notifications sent to commitment owners when deadlines are approaching.
-                </p>
-              </div>
-            </div>
-
-            {isLoadingNudge ? (
-              <div className="flex items-center gap-2 text-slate-400 font-extrabold text-sm py-4">
-                <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
-                Loading nudge preferences...
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Nudge Activation Status Toggle */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] gap-4">
-                  <div>
-                    <span className={cn(
-                      "text-[10px] uppercase font-black px-2.5 py-1 rounded-full tracking-wider mb-2 inline-block transition-colors",
-                      nudgeSettings?.nudge_enabled 
-                        ? "bg-emerald-100 text-emerald-800" 
-                        : "bg-slate-200 text-slate-600"
-                    )}>
-                      {nudgeSettings?.nudge_enabled ? "Active" : "Disabled"}
-                    </span>
-                    <p className="text-base font-black text-slate-900">Nudge Notifications Status</p>
-                    <p className="text-xs text-slate-500 font-bold mt-0.5">Toggle automated Reminders and Overdue Nudges on or off.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-slate-500">
-                      {nudgeSettings?.nudge_enabled ? "Enabled" : "Disabled"}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={updateNudgeMutation.isPending}
-                      onClick={() => updateNudgeMutation.mutate({ nudge_enabled: !nudgeSettings?.nudge_enabled })}
-                      className={cn(
-                        "relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-purple-500/10 disabled:opacity-50",
-                        nudgeSettings?.nudge_enabled ? "bg-purple-600" : "bg-slate-300"
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Gmail Connection</h2>
+                      <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect Gmail to synchronize emails and let the AI pick up all replies and context specific to the actions and nudges</p>
+                      
+                      {isLoadingGmail ? (
+                        <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Checking Status...
+                        </div>
+                      ) : gmailStatus?.connected ? (
+                        <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                           <CheckCircle2 className="w-3.5 h-3.5" />
+                           Status: Connected
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                           <AlertCircle className="w-3.5 h-3.5" />
+                           Status: Disconnected
+                        </div>
                       )}
-                    >
-                      <span
-                        className={cn(
-                          "pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out",
-                          nudgeSettings?.nudge_enabled ? "translate-x-5" : "translate-x-0"
-                        )}
-                      />
-                    </button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    {gmailStatus?.connected ? (
+                      <Button 
+                        variant="secondary" 
+                        onClick={handleGmailDisconnect}
+                        disabled={disconnectGmailMutation.isPending}
+                        className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                      >
+                        {disconnectGmailMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={handleGmailConnect}
+                        className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                      >
+                        Connect Gmail
+                      </Button>
+                    )}
                   </div>
                 </div>
+              </Card>
 
-                {/* First Reminder */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] gap-4">
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
+                      <Video className="w-9 h-9" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Zoom</h2>
+                      <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Zoom account to synchronize meetings and automatically synch meeting notes</p>
+                      
+                      {isLoadingZoom ? (
+                        <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Checking Status...
+                        </div>
+                      ) : zoomStatus?.connected ? (
+                        <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Status: Connected
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          Status: Disconnected
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    {zoomStatus?.connected ? (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => disconnectZoomMutation.mutate()}
+                        disabled={disconnectZoomMutation.isPending}
+                        className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                      >
+                        {disconnectZoomMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={handleZoomConnect}
+                        className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                      >
+                        Connect Zoom
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className="w-16 h-16 bg-blue-100 rounded-[20px] flex items-center justify-center text-blue-700 shadow-2xl shadow-blue-500/10 shrink-0">
+                      <Calendar className="w-9 h-9" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Google Calendar</h2>
+                      <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">Connect your Google Calendar to sync meetings and automatically download transcripts from google meet.</p>
+                      
+                      {isLoadingCalendar ? (
+                        <div className="flex items-center gap-2 mt-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Checking Status...
+                        </div>
+                      ) : calendarStatus?.connected ? (
+                        <div className="flex items-center gap-2 mt-4 text-emerald-700 font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-100/50 border border-emerald-200 px-3 py-1.5 rounded-xl inline-flex">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Status: Connected
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-4 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl inline-flex">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          Status: Disconnected
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    {calendarStatus?.connected ? (
+                      <Button 
+                        variant="secondary" 
+                        onClick={() => disconnectCalendarMutation.mutate()}
+                        disabled={disconnectCalendarMutation.isPending}
+                        className="rounded-2xl border-slate-200 px-6 font-bold h-11 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shrink-0"
+                      >
+                        {disconnectCalendarMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={handleCalendarConnect}
+                        className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                      >
+                        Connect Google Calendar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+            </div>
+          )}
+
+          {activeCategory === 'notifications' && (
+            <NotificationsSettings />
+          )}
+          {activeCategory === 'delegation' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="space-y-6">
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                 <div className="flex gap-6 mb-8">
+                  <div className="w-16 h-16 bg-blue-50 rounded-[20px] flex items-center justify-center text-blue-600 shadow-2xl shadow-blue-500/10 shrink-0">
+                    <Users className="w-9 h-9" />
+                  </div>
                   <div>
-                    <span className="text-[10px] bg-purple-100 text-purple-850 font-black px-2.5 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">First Reminder</span>
-                    <p className="text-base font-black text-slate-900">Automatic Days Before</p>
-                    <p className="text-xs text-slate-500 font-bold mt-0.5">Select when the initial warning nudge should be delivered.</p>
-                  </div>
-                  <div className="relative min-w-[200px]">
-                    <select 
-                      value={nudgeSettings?.first_days_before ?? 2}
-                      onChange={(e) => updateNudgeMutation.mutate({ first_days_before: parseInt(e.target.value) })}
-                      disabled={updateNudgeMutation.isPending}
-                      className="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 focus:outline-none focus:ring-4 focus:ring-purple-500/10 focus:border-purple-600 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <option value={1}>1 Day Before</option>
-                      <option value={2}>2 Days Before</option>
-                      <option value={5}>5 Days Before</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Second Reminder */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] gap-4">
-                  <div>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-850 font-black px-2.5 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">Final Alert</span>
-                    <p className="text-base font-black text-slate-900">Automatic Hours Before</p>
-                    <p className="text-xs text-slate-500 font-bold mt-0.5">Select when the high-priority final status-check triggers.</p>
-                  </div>
-                  <div className="relative min-w-[200px]">
-                    <select 
-                      value={nudgeSettings?.second_hours_before ?? 48}
-                      onChange={(e) => updateNudgeMutation.mutate({ second_hours_before: parseInt(e.target.value) })}
-                      disabled={updateNudgeMutation.isPending}
-                      className="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <option value={24}>24 Hours Before</option>
-                      <option value={48}>48 Hours Before</option>
-                      <option value={72}>72 Hours Before</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Info Note Highlight */}
-                <div className="flex gap-4 p-5 bg-amber-50/60 border border-amber-200/60 rounded-[24px] text-amber-900">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-black uppercase tracking-wider text-amber-800">Post-Deadline Escalation</p>
-                    <p className="text-xs font-bold text-amber-700 leading-relaxed">
-                      Any overdue commitments will be automatically reminded <strong className="text-amber-900 font-black text-xs">daily</strong> post overdue until resolved.
+                    <h2 className="text-2xl font-black text-slate-900">Delegation Management</h2>
+                    <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
+                      Manage who can access your meetings or who you are acting on behalf of.
                     </p>
                   </div>
                 </div>
+                <DelegationManagement />
+              </Card>
+            </motion.div>
+          )}
 
-                {updateNudgeMutation.isPending && (
-                  <p className="text-[10px] font-bold text-[#4A154B] flex items-center gap-1.5 animate-pulse justify-end">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Saving changes in patch mode...
-                  </p>
-                )}
-              </div>
-            )}
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="space-y-6">
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-             <div className="flex gap-6 mb-8">
-              <div className="w-16 h-16 bg-blue-50 rounded-[20px] flex items-center justify-center text-blue-600 shadow-2xl shadow-blue-500/10 shrink-0">
-                <Users className="w-9 h-9" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Delegation Management</h2>
-                <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
-                  Manage who can access your meetings or who you are acting on behalf of.
-                </p>
-              </div>
-            </div>
-            <DelegationManagement />
-          </Card>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
-            <div className="flex flex-col md:flex-row items-start justify-between gap-6">
-              <div className="flex gap-6">
-                <div className="w-16 h-16 bg-blue-50 rounded-[20px] flex items-center justify-center text-blue-600 shadow-2xl shadow-blue-500/10 shrink-0">
-                  <FileUp className="w-9 h-9" />
+          {activeCategory === 'data' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Card className="p-8 bg-white border-2 border-slate-100 rounded-[32px] shadow-xl shadow-slate-200/40">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                  <div className="flex gap-6">
+                    <div className="w-16 h-16 bg-blue-50 rounded-[20px] flex items-center justify-center text-blue-600 shadow-2xl shadow-blue-500/10 shrink-0">
+                      <FileUp className="w-9 h-9" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">Import Tasks</h2>
+                      <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
+                        Bring in tasks from your existing spreadsheets, documents, or raw meeting notes. Verato will automatically extract commitments.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
+                  >
+                    Launch Importer
+                  </Button>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">Import Tasks</h2>
-                  <p className="text-slate-500 text-sm mt-1 font-bold leading-relaxed max-w-md">
-                    Bring in tasks from your existing spreadsheets, documents, or raw meeting notes. Verato will automatically extract commitments.
+                <div className="mt-8 pt-8 border-t border-slate-100 text-center">
+                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
+                    Version {APP_VERSION}
                   </p>
                 </div>
-              </div>
-              
-              <Button 
-                onClick={() => setIsImportModalOpen(true)}
-                className="rounded-2xl bg-slate-900 text-white px-6 font-bold h-11 hover:bg-slate-800 transition-all shrink-0 border-none"
-              >
-                Launch Importer
-              </Button>
-            </div>
-            <div className="mt-8 pt-8 border-t border-slate-100 text-center">
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
-                Version {APP_VERSION}
-              </p>
-            </div>
-          </Card>
-        </motion.div>
+              </Card>
+            </motion.div>
+          )}
+        </main>
       </div>
-
-      {/* Import Modal */}
       <AnimatePresence>
         {isImportModalOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -701,7 +695,7 @@ export const Settings = () => {
       </AnimatePresence>
       <ImportSuccessModal isOpen={isSuccessOpen} onClose={() => setIsSuccessOpen(false)} />
       <LinkSlackPeopleModal isOpen={isSlackImportOpen} onClose={() => setIsSlackImportOpen(false)} />
-    </div>
+      </>
   );
 };
 
