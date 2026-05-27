@@ -1,22 +1,14 @@
 # What to Expect in V2
 
-Verato v1 proved the core idea: AI reads your meeting transcripts, extracts every commitment, and nudges owners before things slip. V2 makes Verato the operating system a Chief of Staff actually lives in every day.
+Verato v1 proved the core idea — and then some. AI reads your meeting transcripts, extracts every commitment, and nudges owners before things slip. Meetings now flow in automatically from Google Meet and Zoom. Slack and Gmail replies are read and parsed automatically. Your team can delegate ownership and receive personal notifications.
+
+V2 is about intelligence, not plumbing. The pipeline is built. Now Verato needs to tell you *why* things are at risk, not just *that* they are.
 
 Here is what is coming.
 
 ---
 
-## 1. Your Meetings Come to Verato — You Do Nothing
-
-Right now you have to download a transcript and upload it manually. In V2, that step disappears entirely.
-
-Connect your Google Calendar once. From that point on, the moment a Google Meet call ends, Verato automatically pulls the transcript, processes it, and surfaces the commitments — no clicks, no file management. If your team uses Zoom, a webhook integration does the same thing the second the recording is ready.
-
-**The goal:** a CoS who attends 15 meetings on Monday has all 15 processed and reviewed by Tuesday morning without having touched Verato once.
-
----
-
-## 2. The Dashboard Answers "How Is the Product Launch Looking?"
+## 1. The Dashboard Answers "How Is the Product Launch Looking?"
 
 Today the dashboard shows a list of individual commitments sorted by status. That is useful for a checklist, but a CoS needs to answer strategic questions — fast.
 
@@ -28,7 +20,7 @@ Green, Amber, or Red status is computed automatically from the underlying commit
 
 ---
 
-## 3. Verato Tells You Why Something Is Slipping — Not Just That It Is
+## 2. Verato Tells You Why Something Is Slipping — Not Just That It Is
 
 A date change is not the same as a blockade. V2 can tell the difference.
 
@@ -38,7 +30,7 @@ This is the difference between tracking commitments and managing the politics ar
 
 ---
 
-## 4. See Your Organisation by Department, Not Just by Person
+## 3. See Your Organisation by Department, Not Just by Person
 
 V1 shows delivery rates per individual. V2 aggregates this into a **Department Health Heatmap** — a visual grid that shows which teams are consistently hitting deadlines and which are bottlenecked, across the last 2 weeks, last month, and last quarter.
 
@@ -46,9 +38,9 @@ It also tracks **Commitment Debt**. If a VP consistently extends every deadline 
 
 ---
 
-## 5. Nudge Replies Become CoS Decisions, Not Dead Ends
+## 4. Ambiguous Replies Become CoS Decisions, Not Dead Ends
 
-V1 handles simple replies: "done" marks it complete, "next week" extends the deadline. A long paragraph explaining a complex situation currently gets ignored or fails to parse.
+V1 handles simple replies cleanly: "done" marks it complete, "next week" extends the deadline. A long paragraph explaining a complex situation currently gets parsed as best-effort or ignored.
 
 In V2, any reply that can't be cleanly resolved lands in a **CoS Review Queue**. Verato presents:
 
@@ -61,9 +53,28 @@ Nothing falls through the cracks. Every reply either resolves automatically or g
 
 ---
 
+## 5. Risk Score Breakdown — Not Just a Number
+
+V1 shows each commitment's risk score (0–100) and uses it to sort the dashboard. V2 shows you *why* it scored that way:
+
+- Owner's historical delivery rate on similar deadlines
+- Days remaining vs. owner's average completion time
+- Number of prior extensions on this commitment
+- Whether the owner has replied to any nudge
+
+This turns the risk score from a black box into a coaching tool — the CoS can see at a glance whether a score is driven by the owner's track record or just time pressure.
+
+---
+
+## 6. More Meeting Sources — tl;dv, Fathom, and Teams
+
+Google Meet and Zoom are already connected. V2 extends this to the other major recording and AI-notetaking tools your team might already be using — tl;dv, Fathom, and Microsoft Teams. Connect once and every meeting, regardless of platform, flows into Verato automatically.
+
+---
+
 ## The Bigger Picture
 
-V1 gave you a commitment tracker. V2 gives you a CoS command centre.
+V1 gave you a commitment tracker that removes the manual work. V2 gives you a CoS command centre that removes the guesswork.
 
 By the end of V2, Verato should feel like a Chief of Staff's second brain — one that attends every meeting silently, remembers every promise, reads between the lines of every reply, and puts only the decisions that genuinely need human judgement in front of you.
 

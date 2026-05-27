@@ -8,12 +8,22 @@ Verato is your Chief of Staff's command centre. It automatically extracts every 
 ## Getting Started
 
 **Step 1 — Create your account**
-Go to the app URL and click **Register**. Enter your name, email, and password. This creates your organisation in Verato — you are the admin.
+Go to the app URL and click **Register**. Enter your name, email, and password. You will receive a verification email — click the link to activate your account. This creates your organisation in Verato — you are the admin.
 
-**Step 2 — Upload your first meeting**
-Click **Upload** from the dashboard. Paste in a transcript or upload a `.txt`, `.docx`, or `.csv` file. Verato sends it to Gemini AI, which extracts every commitment — who promised what, by when — and brings them back for you to review. This takes 15–30 seconds.
+**Step 2 — Invite your team**
+Go to **Settings → Team** and invite colleagues by email. They will receive an invite link. You can resend or revoke invites at any time. Once they register, their Person record is automatically linked to their user account.
 
-**Step 3 — Review and confirm commitments**
+**Step 3 — Connect your calendar and meeting tools**
+Go to **Settings** and connect the integrations that apply to your team:
+- **Google Calendar** — Verato automatically detects Google Meet calls when they end, pulls the transcript from Drive, and processes it. No upload needed.
+- **Zoom** — Once connected, completed cloud recordings trigger processing automatically via webhook.
+- **Gmail** — Verato reads replies to nudge emails and updates commitment status automatically.
+- **Slack** — Verato sends nudge DMs and reads owners' replies in the thread.
+
+**Step 4 — Upload your first meeting (or let auto-ingest do it)**
+If your calendar is connected, Verato will pick up new meetings automatically. You can also click **Upload** from the dashboard to paste a transcript or upload a `.txt`, `.docx`, or `.csv` file. Processing takes 15–30 seconds.
+
+**Step 5 — Review and confirm commitments**
 After processing, go to the meeting and review the extracted commitments. Each one shows the owner, deadline, and a confidence score. Confirm the ones that look right, edit any that need fixing (owner, deadline, wording), and reject anything that isn't actually a commitment.
 
 ---
@@ -29,15 +39,41 @@ Full view of a single commitment — the original text, normalised version, owne
 **Manual Nudge**
 On any commitment, click **Nudge**. Choose your method — Slack DM, Email, Phone, In Person. If Gmail is connected, email sends directly from your Gmail account. All nudges are logged in the commitment history so there is a full record.
 
-**People**
-See everyone in your organisation with their delivery rate and commitment count. Add new people, link them to their Slack account, or merge duplicate records if the same person appears under two names.
+**Automatic Nudges with Reply Parsing**
+Verato sends automatic nudge DMs via Slack and emails via Gmail on a schedule. When an owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply every 15 minutes, parses the intent with Gemini AI, and updates the commitment status automatically. The CoS sees the update in the dashboard without lifting a finger.
+
+**Slack Interactive Buttons**
+Slack nudge DMs include three action buttons the owner can tap directly in Slack: **Done**, **Need more time**, or **Blocked**. Tapping a button updates the commitment instantly — no reply needed.
+
+**Auto-Ingestion (Google Meet + Zoom)**
+Once your Google Calendar or Zoom is connected, new meetings flow into Verato automatically:
+- Google Meet calls end → Verato finds the transcript in Drive within 15 minutes and processes it
+- Zoom cloud recordings complete → webhook fires, Verato processes the recording immediately
+
+Check the **Meetings** list to see the status of each ingested meeting (Pending / Processing / Done / Failed).
+
+**Directory**
+See everyone who makes commitments in your meetings — they receive nudges but don't need a Verato account. Use the **Add to Directory** button to add someone manually or import your Slack workspace members. Merge duplicate records if the same person appears under two names.
+
+**Delegation**
+A CoS can delegate meeting ownership to a colleague (e.g., a senior EA or department lead). Go to **Settings → Delegation** and assign a delegate. They receive an email invitation and an in-app notification. Once accepted, they can manage commitments from meetings assigned to them.
 
 **Meetings**
-Full list of all uploaded meetings with processing status. Click into any meeting to see the transcript, participants, and all commitments extracted from it.
+Full list of all uploaded and auto-ingested meetings with processing status. Click into any meeting to see the transcript, participants, and all commitments extracted from it.
+
+**In-App Notifications**
+The bell icon in the top nav shows your personal notification feed:
+- When a Slack or Gmail reply comes in on a commitment you own or manage
+- When a commitment you created is marked done or deferred
+- When someone accepts a delegation invite
+- When a meeting finishes processing
 
 **Settings**
-- **Slack** — Connect your Slack workspace. Once connected, automatic nudge DMs go to owners on the schedule you set.
-- **Gmail** — Connect your Gmail account. Verato sends nudge emails from your address and automatically reads the owner's reply — if they say "done" or "pushing to next week", Verato updates the commitment status automatically.
+- **Slack** — Connect your Slack workspace. Once connected, automatic nudge DMs go to owners on the schedule you set. Slack users can be searched and linked to Person records.
+- **Gmail** — Connect your Gmail account. Verato sends nudge emails from your address and reads owner replies automatically.
+- **Google Calendar** — Connect your calendar to enable Google Meet auto-ingestion.
+- **Zoom** — Connect your Zoom account to enable Zoom recording auto-ingestion.
+- **Team** — Invite colleagues, resend or revoke pending invitations.
 - **Nudge Schedule** — Set when automatic reminders fire: first nudge (1, 2, or 5 days before deadline), second nudge (24, 48, or 72 hours before), then daily nudges for days +1, +2, +3 overdue. Toggle the whole engine on/off.
 
 ---
@@ -49,17 +85,23 @@ Please test and give feedback on:
 1. **Extraction quality** — Did Verato find all the real commitments? Did it miss any? Did it pick up anything that wasn't a commitment?
 2. **Owner matching** — Did it correctly identify who owns each commitment?
 3. **Deadline resolution** — If someone said "by end of Thursday" did it resolve to the right date?
-4. **Commitment actions** — Confirm, escalate, resolve, reopen — do they feel right?
-5. **Nudge flow** — Does the Slack DM arrive? Does the email send from your Gmail?
-6. **Risk scoring** — Does the At Risk / Overdue grouping match your intuition about which commitments are in trouble?
+4. **Auto-ingestion** — If your calendar is connected, does the meeting appear and process within 15 minutes of it ending?
+5. **Reply parsing** — Reply to a Slack nudge DM or email nudge with "done" or "need another week" — does Verato pick it up correctly?
+6. **Slack buttons** — Tap Done or Need More Time on a Slack nudge — does the commitment update immediately?
+7. **Commitment actions** — Confirm, escalate, resolve, reopen — do they feel right?
+8. **Nudge flow** — Does the Slack DM arrive? Does the email send from your Gmail?
+9. **Risk scoring** — Does the At Risk / Overdue grouping match your intuition about which commitments are in trouble?
+10. **Notifications** — Do in-app notifications appear at the right times for the right people?
 
 ---
 
 ## Known Limitations (Beta)
 
 - **Slack nudges** require the org admin to connect Slack and enable the nudge engine in Settings first
-- **Gmail reply auto-parsing** runs every 30–120 min depending on your org's poll setting — not instant
-- **Zoom / Google Meet auto-ingest** not yet built — transcripts must be uploaded manually
+- **Gmail reply auto-parsing** runs every 15 minutes — not instant
+- **Slack reply parsing** runs every 15 minutes — not instant
+- **Google Meet auto-ingest** requires the meeting organiser to have Google Workspace with transcription enabled in Drive; if transcription is off, Verato will detect this and fall back to manual upload
+- **Zoom auto-ingest** requires Zoom cloud recording to be enabled on the account
 - The app is in active development — some rough edges expected
 
 ---

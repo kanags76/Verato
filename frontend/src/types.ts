@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.01';
+export const APP_VERSION = '2.1';
 
 export interface Commitment {
   id: string;
@@ -88,8 +88,8 @@ export interface Clarification {
 
 export interface Notification {
   id: string;
-  title: string;
   message: string;
+  notification_type: 'meeting_ready' | 'meeting_failed' | 'slack_reply' | 'gmail_reply' | 'owner_update' | 'commitment_closed' | 'delegation_invite';
   commitment_id?: string;
   is_read: boolean;
   created_at: string;

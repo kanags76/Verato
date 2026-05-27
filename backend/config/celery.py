@@ -8,6 +8,8 @@ app = Celery('commitment_os')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
+_REPLY_POLL_SCHEDULE = crontab(minute=0, hour=8)  # once daily at 08:00 UTC — change here to affect both
+
 app.conf.beat_schedule = {
     'recompute-risk-scores': {
         'task':     'apps.commitments.tasks.recompute_risk_scores',
@@ -23,7 +25,7 @@ app.conf.beat_schedule = {
     },
     'poll-gmail-replies': {
         'task':     'apps.notifications.tasks.poll_gmail_replies',
-        'schedule': crontab(minute='*/15'),  # every 15 min — per-org interval enforced in task
+        'schedule': _REPLY_POLL_SCHEDULE,
     },
     'sync-calendar-events': {
         'task':     'apps.notifications.tasks.sync_calendar_events',
@@ -31,6 +33,6 @@ app.conf.beat_schedule = {
     },
     'poll-slack-replies': {
         'task':     'apps.notifications.tasks.poll_slack_replies',
-        'schedule': crontab(minute='*/15'),  # every 15 min — checks Slack DM threads for owner replies
+        'schedule': _REPLY_POLL_SCHEDULE,
     },
 }
