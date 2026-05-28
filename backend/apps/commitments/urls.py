@@ -6,7 +6,7 @@ router = DefaultRouter()
 router.register('commitments', CommitmentViewSet, basename='commitment')
 router.register('tags', CommitmentTagViewSet, basename='tag')
 
-urlpatterns = router.urls + [
+urlpatterns = [
     path('tags/search/', tag_list, name='tag-list'),
     path('initiatives/', initiatives_list, name='initiatives-list'),
-]
+] + router.urls
