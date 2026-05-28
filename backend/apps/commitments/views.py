@@ -666,6 +666,7 @@ def tag_list(request):
 
 
 class CommitmentTagViewSet(
+    mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
