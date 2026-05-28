@@ -16,9 +16,9 @@ Verato/
 │   ├── apps/
 │   │   ├── accounts/          Organisation, User (is_org_admin), Person, Invitation, MeetingManager
 │   │   ├── meetings/          Meeting, MeetingParticipant, MeetingTopic
-│   │   ├── commitments/       Commitment, CommitmentTag, EscalationEvent, CommitmentEvent, risk.py
+│   │   ├── commitments/       Commitment, CommitmentTag (+ is_initiative), EscalationEvent, CommitmentEvent, risk.py
 │   │   ├── notifications/     Slack nudges, Gmail OAuth, Google Calendar, Zoom, NudgeLog, GmailPollLog, CalendarConnection, CalendarEvent, ZoomConnection, ZoomRecording, InAppNotification, weekly digest
-│   │   ├── prompts/           Editable Gemini prompts stored in DB (transcript, import, gmail_reply_parse)
+│   │   ├── prompts/           Editable Gemini prompts in DB + AICallLog (full history of every AI call)
 │   │   └── analytics/         Dashboard summary (overdue / at-risk / on-track counts)
 │   ├── extraction/            AI extraction engine (pure Python, no Django dependency)
 │   │   ├── extractor.py       extract_commitments() — transcript → {commitments, topics, meeting_type, summary}
@@ -174,7 +174,15 @@ Stop Ctrl+C in tabs 1–3. PostgreSQL and Redis can stay running.
 | `/api/v1/commitments/{id}/log-update/` | POST | Log manual follow-up response |
 | `/api/v1/commitments/{id}/history/` | GET | Full audit log — newest first |
 | **Tags** | | |
-| `/api/v1/tags/` | GET | Tag autocomplete ranked by usage; `?q=` prefix filter |
+| `/api/v1/tags/` | GET | List all org tags with id, label, usage, is_initiative, description |
+| `/api/v1/tags/search/` | GET | Tag autocomplete ranked by usage; `?q=` prefix filter |
+| `/api/v1/tags/{id}/` | GET/PATCH | Tag detail / rename, promote to initiative, set description (admin only) |
+| `/api/v1/tags/{id}/merge/` | POST | Merge into another tag `{into: "label"}` — re-tags all commitments (admin only) |
+| `/api/v1/tags/{id}/generate-summary/` | POST | Gemini AI summary for initiative tag; skips if summary < 12h old and no updates; `?force=true` overrides |
+| **Initiatives** | | |
+| `/api/v1/initiatives/` | GET | Strategic initiatives (is_initiative tags) with per-status commitment counts and AI summary |
+| **Auto-tag** | | |
+| `/api/v1/commitments/{id}/auto-tag/` | POST | Gemini suggests and applies 1–4 tags from org tag library |
 | **Delegation** | | |
 | `/api/v1/managers/` | GET | List delegations involving current user (as delegator or delegatee) |
 | `/api/v1/managers/` | POST | Create delegation request `{manager_user_id}` — current user is delegator |
@@ -286,6 +294,9 @@ pytest --cov=apps --cov=extraction --cov-report=html
 | W18 | Phase 3A Sprint 5–6: Meetings commitment count, meeting ownership & delegation | ✓ Done |
 | W18.5 | Sprint 6 frontend: delegation UI, role-aware commitment actions, OTP registration flow, ActivateAccount screen | ✓ Done |
 | W19 | User-scoped notifications: `recipient_user` FK on `InAppNotification`, `COMMITMENT_CLOSED` + `DELEGATION_INVITE` types, routing rules per notification type, delegation invite email + in-app | ✓ Done |
+| W20 | Strategic Initiatives: `CommitmentTag` promoted to initiative (`is_initiative`, `description`, `ai_summary`); tag CRUD + merge API; `GET /initiatives/` with per-status counts; `POST auto-tag` (Gemini); AI summary with staleness guard (12h + no updates) | ✓ Done |
+| W20.5 | AI call logging: `AICallLog` model captures every Gemini call — prompt name/version, input, output, duration, success, error, linked domain objects; all 8 call sites instrumented; `weekly_digest_intro` prompt moved to DB | ✓ Done |
+| W20.6 | Risk score breakdown: `compute_risk_breakdown()` + `risk_breakdown` serializer field exposes 3-component breakdown (deadline proximity, owner track record, update recency) per commitment | ✓ Done |
 
 ```
 PHASE 1 — Backend (W1–W7)            ✓ COMPLETE
@@ -296,7 +307,8 @@ PHASE 2.7 — In-app notifications      ✓ COMPLETE
 PHASE 2.8 — Passive ingestion         ✓ COMPLETE (Google Meet + Zoom auto-processing)
 PHASE 2.9 — Frontend integrations UI  ✓ COMPLETE (Calendar + Zoom cards, notification bell)
 PHASE 3A — Auth, Legal & Team Mgmt    ✓ COMPLETE (email verify, password reset, invitations, ownership, user-scoped notifications)
-PHASE 3B — Transcript Sources         ← Next (tl;dv, Granola, Fathom)
+PHASE 3B — Strategic Intelligence     ✓ COMPLETE (initiatives, tag management, auto-tag, AI call logging, risk breakdown)
+PHASE 3C — Transcript Sources         ← Next (tl;dv, Granola, Fathom, Teams)
 ```
 
 ---

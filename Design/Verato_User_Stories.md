@@ -470,6 +470,56 @@ Acceptance criteria
 - Pages are readable on mobile, no login required
 API needs: Static pages only — no backend required
 
+# Epic 10 — Strategic Initiatives
+
+## US-10.1 — Promote a tag to a Strategic Initiative ✅
+As a: CoS who manages multiple concurrent workstreams
+I want to: Promote any commitment tag to a named Strategic Initiative with a description
+So that: I can see the health of a whole theme at a glance without opening individual commitments
+Acceptance criteria
+- Any tag can be toggled to is_initiative=true with a description field
+- Toggle appears inline in the Tag Management panel on the Initiatives screen (admin only)
+- Promoted tags appear in the Initiatives view; plain tags do not
+- Description is optional at promotion time — editable later
+API needs: ✅ PATCH /api/v1/tags/{id}/ {is_initiative: true, description: "..."}
+
+## US-10.2 — See initiative health at a glance ✅
+As a: CoS preparing for an executive meeting
+I want to: See each strategic initiative as a card with commitment counts and an AI summary
+So that: I can brief a senior stakeholder in 30 seconds without pulling a spreadsheet
+Acceptance criteria
+- Initiatives screen shows one card per initiative
+- Each card: initiative label, description, status pill row (Active / At Risk / Escalated / Done counts), AI summary text with timestamp
+- Empty state if no initiatives exist yet
+- "Refresh summary" button on each card regenerates the AI health summary
+- Summary skips regeneration if summary is < 12h old and no commitments changed — returns cached with a note
+- ?force=true on the API bypasses the staleness check
+API needs: ✅ GET /api/v1/initiatives/ · ✅ POST /api/v1/tags/{id}/generate-summary/
+
+## US-10.3 — Auto-tag a commitment with Gemini ✅
+As a: CoS reviewing a freshly extracted commitment
+I want to: Click one button and have Gemini suggest tags from my existing tag library
+So that: Commitments are tagged consistently without me having to think about it every time
+Acceptance criteria
+- "Auto-tag" button on commitment detail / edit panel
+- On click: spinner, then tags applied and displayed
+- Toast shows which tags were applied: "Tags applied: product, q2 roadmap"
+- Tags are added to existing tags, not replacing them
+- Uses existing org tag library; only creates new tags for themes not already covered
+API needs: ✅ POST /api/v1/commitments/{id}/auto-tag/
+
+## US-10.4 — Manage tags: rename, merge, delete ✅
+As an: Org admin cleaning up the tag library
+I want to: Rename a tag, merge two duplicates into one, or delete an unused tag
+So that: The tag library stays clean and useful as the org grows
+Acceptance criteria
+- Tag management panel (admin only) shows all tags with usage counts
+- Rename: inline edit on any tag label
+- Merge: pick a source tag and a target label — all commitments re-tagged, source deleted
+- Delete: removes the tag from all commitments
+- Non-admins can see tags but cannot manage them
+API needs: ✅ PATCH /api/v1/tags/{id}/ · ✅ POST /api/v1/tags/{id}/merge/ {into: "label"} · ✅ DELETE /api/v1/tags/{id}/
+
 # Out of scope for v0.3 (deferred user stories)
 These have been considered and intentionally postponed:
 

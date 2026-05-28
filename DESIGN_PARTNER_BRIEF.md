@@ -18,10 +18,10 @@ Verato is a command centre for the Chief of Staff. It sits between your meetings
 Connect Google Calendar or Zoom once. When a meeting ends, Verato pulls the transcript, sends it to Gemini AI, and extracts every commitment — who promised what, to whom, by when — and surfaces them for review. No manual upload. No missed promises.
 
 **2. Tracks and scores risk automatically**
-Every commitment gets an owner, a deadline, and a live risk score based on how close the deadline is, the owner's historical delivery rate, and how long since there was any update. The dashboard shows you exactly what is on track, what is slipping, and what needs intervention — before it becomes a problem.
+Every commitment gets an owner, a deadline, and a live risk score based on how close the deadline is, the owner's historical delivery rate, and how long since there was any update. The score is fully transparent — you can see exactly how much each factor contributes. The dashboard shows you what is on track, what is slipping, and what needs intervention — before it becomes a problem.
 
 **3. Nudges owners and reads their replies**
-When a deadline approaches, Verato sends a Slack DM or email nudge to the action owner on a schedule you configure. When the owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply, updates the commitment status, and notifies the CoS. If the reply is ambiguous, the CoS sees the full text and decides what to do. Nothing falls through the cracks.
+When a deadline approaches, Verato sends a Slack DM or email nudge to the action owner on a schedule you configure. When the owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply, updates the commitment status, and notifies the CoS. If the reply is ambiguous, the CoS sees the full text immediately and decides what to do. Nothing falls through the cracks.
 
 ---
 
@@ -39,15 +39,18 @@ When a deadline approaches, Verato sends a Slack DM or email nudge to the action
 
 Verato is in private beta with a working product:
 
-- Google Meet and Zoom auto-ingestion — meetings processed automatically within 15 minutes of ending
-- Gemini AI extraction — commitments pulled from transcripts with owner, deadline, and confidence score
-- Risk scoring engine — live score per commitment, recomputed daily
-- Slack and Gmail nudges — automatic DM and email nudges on a configurable schedule
-- Reply parsing — Gemini reads owner replies and updates status automatically
-- Slack interactive buttons — owners tap Done / Need More Time / Blocked directly in Slack
-- Delegation — CoS can assign a colleague to manage meetings on their behalf
-- In-app notifications — personal feed for the CoS showing replies, updates, and meeting results
-- Team management — invite colleagues, manage access
+- **Google Meet and Zoom auto-ingestion** — meetings processed automatically within 15 minutes of ending
+- **Gemini AI extraction** — commitments pulled from transcripts with owner, deadline, and confidence score
+- **Risk scoring with breakdown** — live score per commitment showing exactly how much deadline proximity, owner track record, and update recency each contribute
+- **Slack and Gmail nudges** — automatic DM and email nudges on a configurable schedule
+- **Reply parsing** — Gemini reads owner replies and updates status automatically; ambiguous replies surface the full text to the CoS for review
+- **Slack interactive buttons** — owners tap Done / Need More Time / Blocked directly in Slack
+- **Strategic Initiatives** — tag-based grouping of commitments into named initiatives (Q3 Launch, Board Prep, etc.) with AI-generated health summaries and per-status counts
+- **Auto-tagging** — Gemini suggests tags for any commitment from your existing tag library in one click
+- **Delegation** — CoS can assign a colleague to manage meetings on their behalf
+- **In-app notifications** — personal feed for the CoS showing replies, updates, and meeting results
+- **Team management** — invite colleagues, manage access
+- **AI call transparency** — every Gemini call is logged with full input, output, duration, and linked context; all prompts are editable in the admin panel without a code deploy
 
 ---
 
@@ -57,6 +60,7 @@ We are not looking for feedback on colours or fonts. We are looking for a design
 
 - **Does the information hierarchy feel right?** The CoS needs to see what needs attention now — is the dashboard telling the right story at a glance?
 - **Where does trust break down?** When does the CoS override Verato's interpretation and what does that tell us about the AI extraction quality?
+- **Do Strategic Initiatives map to how you actually think?** We built a tag-based grouping system — does the concept of promoting a theme to an "initiative" match how a CoS organises their work?
 - **What is missing from the commitment lifecycle?** Are there moments in how a CoS actually manages commitments that Verato does not yet support?
 - **How does this fit into an existing workflow?** A CoS already has tools — email, Slack, a calendar, probably a Notion or spreadsheet. Where does Verato slot in and where does it create friction?
 

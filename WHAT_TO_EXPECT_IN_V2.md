@@ -1,74 +1,80 @@
 # What to Expect in V2
 
-Verato v1 proved the core idea — and then some. AI reads your meeting transcripts, extracts every commitment, and nudges owners before things slip. Meetings now flow in automatically from Google Meet and Zoom. Slack and Gmail replies are read and parsed automatically. Your team can delegate ownership and receive personal notifications.
+Verato v1 proved the core idea — and then some. AI reads your meeting transcripts, extracts every commitment, and nudges owners before things slip. Meetings flow in automatically from Google Meet and Zoom. Slack and Gmail replies are parsed automatically. Your team can delegate ownership and receive personal notifications.
 
-V2 is about intelligence, not plumbing. The pipeline is built. Now Verato needs to tell you *why* things are at risk, not just *that* they are.
-
-Here is what is coming.
+V2 is about intelligence, not plumbing. The pipeline is built. Now Verato needs to tell you *why* things are at risk, not just *that* they are. Several of these features are already live.
 
 ---
 
-## 1. The Dashboard Answers "How Is the Product Launch Looking?"
+## 1. Strategic Initiatives — Already Live
 
-Today the dashboard shows a list of individual commitments sorted by status. That is useful for a checklist, but a CoS needs to answer strategic questions — fast.
+You define your key initiatives — Q3 Product Launch, Board Prep, Hiring Plan — by promoting any tag to a Strategic Initiative with a description. Verato groups all commitments underneath them and gives you:
 
-V2 introduces **Strategic Pillars**. You define your key initiatives (Q3 Product Launch, Board Prep, Hiring Plan, etc.) and Verato groups all commitments underneath them. At the top of each pillar, an AI-generated executive summary gives you the answer in three sentences:
+- Per-initiative commitment counts by status: Active · At Risk · Escalated · Done
+- An AI-generated 2–3 sentence health summary per initiative, written for a CoS:
 
-> *"The Product Launch is trending Amber. Engineering is meeting 90% of commitments, but Marketing has missed 3 deadlines this week, putting the Friday timeline at risk."*
+> *"The Product Launch initiative has 8 active commitments. Marketing has 2 at-risk items with deadlines in the next 3 days. Engineering is on track."*
 
-Green, Amber, or Red status is computed automatically from the underlying commitments. You get a board-ready summary without opening a spreadsheet.
+The summary only regenerates when something has actually changed since it was last generated — no unnecessary AI calls. You can also prompt Verato to auto-tag any commitment with suggestions from your existing tag library in one click.
+
+**How to use it:** Add tags to commitments as you confirm them. Once a theme emerges, promote the tag to an Initiative from the Initiatives screen and add a description. The AI summary populates automatically.
 
 ---
 
-## 2. Verato Tells You Why Something Is Slipping — Not Just That It Is
+## 2. Risk Score Breakdown — Already Live
 
-A date change is not the same as a blockade. V2 can tell the difference.
+V1 showed each commitment's risk score (0–100) and used it to sort the dashboard. The score is now fully transparent — every commitment shows *why* it scored that way:
 
-When an owner replies to a nudge saying "I'm still waiting on John's team to hand over the API keys," Verato doesn't just log a new deadline. It flags this as a **Cross-Functional Blockade** — highlights it on the dashboard, names the blocking team, and puts it in front of the CoS as something that requires their intervention, not just a follow-up email.
+- **Deadline proximity (50%)** — how many days remain, with clear labels (Due today / Due in 3 days / Overdue by N days)
+- **Owner track record (35%)** — the owner's historical delivery rate across all their commitments
+- **Update recency (15%)** — how many days since any activity was logged
+
+This turns the risk score from a black box into a coaching tool. You can see at a glance whether a score is driven by the owner's history or just time pressure.
+
+---
+
+## 3. Ambiguous Replies — Already Improved
+
+When an owner's reply can't be parsed as done / deferred / blocked, Verato no longer silently swallows it. The CoS receives an immediate notification that includes:
+
+- A clear message: *"Action owner replied — I was unable to mark a status. Marked for your review."*
+- The owner's full reply text, verbatim
+- A link directly to the commitment history where the full reply is also recorded
+
+Every reply either resolves automatically or lands in front of the CoS with full context. Nothing falls through the cracks.
+
+---
+
+## 4. AI Transparency and Eval Foundation — Already Live
+
+Every Gemini call Verato makes — transcript extraction, reply parsing, tag suggestion, initiative summaries, weekly digest — is now logged in full. Each log entry captures the prompt sent, the response received, how long it took, whether it succeeded, and which meeting or commitment triggered it.
+
+This is the foundation for:
+- **Prompt management** — all AI prompts are editable in the admin panel without a code deploy
+- **Quality tracking** — see how each prompt is performing over time
+- **Eval harness** — regression testing new prompt versions against historical inputs and expected outputs
+
+---
+
+## 5. Verato Tells You Why Something Is Slipping — Coming Next
+
+A date change is not the same as a blockade. When an owner replies saying "I'm still waiting on John's team to hand over the API keys," Verato will flag this as a **Cross-Functional Blockade** — highlight it on the dashboard, name the blocking team, and surface it to the CoS as something requiring their intervention.
 
 This is the difference between tracking commitments and managing the politics around them.
 
 ---
 
-## 3. See Your Organisation by Department, Not Just by Person
+## 6. Department Health and Commitment Debt — Coming Next
 
-V1 shows delivery rates per individual. V2 aggregates this into a **Department Health Heatmap** — a visual grid that shows which teams are consistently hitting deadlines and which are bottlenecked, across the last 2 weeks, last month, and last quarter.
+V1 shows delivery rates per individual. V2 will aggregate this into a Department Health view — which teams are consistently hitting deadlines and which are bottlenecked, across the last 2 weeks, month, and quarter.
 
-It also tracks **Commitment Debt**. If a VP consistently extends every deadline by 2 days, week after week, Verato flags them as a chronic under-estimator. This gives the CoS the context to adjust timelines in planning, rather than being surprised at review.
-
----
-
-## 4. Ambiguous Replies Become CoS Decisions, Not Dead Ends
-
-V1 handles simple replies cleanly: "done" marks it complete, "next week" extends the deadline. A long paragraph explaining a complex situation currently gets parsed as best-effort or ignored.
-
-In V2, any reply that can't be cleanly resolved lands in a **CoS Review Queue**. Verato presents:
-
-- The full reply from the owner
-- A plain-English Gemini summary: *"Sarah says the slides are blocked on updated financial figures from Finance. She is requesting a 3-day extension."*
-- The history of this commitment — prior nudges, prior extensions
-- Two buttons: **Approve Extension** or **Send Escalation Nudge**
-
-Nothing falls through the cracks. Every reply either resolves automatically or gets a decision from the CoS.
+It will also track Commitment Debt: if a VP consistently extends every deadline by 2 days, week after week, Verato flags them as a chronic under-estimator. This gives the CoS the context to adjust timelines in planning, not in the debrief.
 
 ---
 
-## 5. Risk Score Breakdown — Not Just a Number
+## 7. More Meeting Sources — Coming Next
 
-V1 shows each commitment's risk score (0–100) and uses it to sort the dashboard. V2 shows you *why* it scored that way:
-
-- Owner's historical delivery rate on similar deadlines
-- Days remaining vs. owner's average completion time
-- Number of prior extensions on this commitment
-- Whether the owner has replied to any nudge
-
-This turns the risk score from a black box into a coaching tool — the CoS can see at a glance whether a score is driven by the owner's track record or just time pressure.
-
----
-
-## 6. More Meeting Sources — tl;dv, Fathom, and Teams
-
-Google Meet and Zoom are already connected. V2 extends this to the other major recording and AI-notetaking tools your team might already be using — tl;dv, Fathom, and Microsoft Teams. Connect once and every meeting, regardless of platform, flows into Verato automatically.
+Google Meet and Zoom are already connected. V2 extends this to tl;dv, Fathom, Granola, and Microsoft Teams. Connect once and every meeting, regardless of platform, flows into Verato automatically.
 
 ---
 
@@ -80,4 +86,4 @@ By the end of V2, Verato should feel like a Chief of Staff's second brain — on
 
 ---
 
-*Verato V2 — Coming Soon*
+*Verato V2 — In Progress*

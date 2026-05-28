@@ -40,7 +40,7 @@ Full view of a single commitment — the original text, normalised version, owne
 On any commitment, click **Nudge**. Choose your method — Slack DM, Email, Phone, In Person. If Gmail is connected, email sends directly from your Gmail account. All nudges are logged in the commitment history so there is a full record.
 
 **Automatic Nudges with Reply Parsing**
-Verato sends automatic nudge DMs via Slack and emails via Gmail on a schedule. When an owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply every 15 minutes, parses the intent with Gemini AI, and updates the commitment status automatically. The CoS sees the update in the dashboard without lifting a finger.
+Verato sends automatic nudge DMs via Slack and emails via Gmail on a schedule. When an owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply once daily at 08:00 UTC, parses the intent with Gemini AI, and updates the commitment status automatically. If the reply is ambiguous, the CoS receives a notification with the full reply text and can decide what to do.
 
 **Slack Interactive Buttons**
 Slack nudge DMs include three action buttons the owner can tap directly in Slack: **Done**, **Need more time**, or **Blocked**. Tapping a button updates the commitment instantly — no reply needed.
@@ -51,6 +51,15 @@ Once your Google Calendar or Zoom is connected, new meetings flow into Verato au
 - Zoom cloud recordings complete → webhook fires, Verato processes the recording immediately
 
 Check the **Meetings** list to see the status of each ingested meeting (Pending / Processing / Done / Failed).
+
+**Strategic Initiatives**
+Group related commitments under strategic themes — Q3 Product Launch, Board Prep, Hiring Plan, etc. Any tag can be promoted to a Strategic Initiative with a description. The Initiatives view shows per-status commitment counts (Active, At Risk, Escalated, Done) and an AI-generated 2–3 sentence health summary per initiative. The summary only regenerates when commitments have changed since the last one.
+
+**Tags and Auto-tagging**
+Every commitment can carry one or more tags. Tags are created inline as you type — no pre-configuration needed. On any commitment, click **Auto-tag** to have Gemini suggest and apply tags from your existing tag library. Admins can rename, merge, promote, or delete tags via the Tags management panel.
+
+**Risk Score Breakdown**
+The risk score on each commitment now shows a full breakdown: how much of the score comes from deadline proximity (50%), the owner's historical delivery rate (35%), and how recently the commitment was updated (15%). This turns the score from a black box into an actionable signal.
 
 **Directory**
 See everyone who makes commitments in your meetings — they receive nudges but don't need a Verato account. Use the **Add to Directory** button to add someone manually or import your Slack workspace members. Merge duplicate records if the same person appears under two names.
@@ -86,22 +95,25 @@ Please test and give feedback on:
 2. **Owner matching** — Did it correctly identify who owns each commitment?
 3. **Deadline resolution** — If someone said "by end of Thursday" did it resolve to the right date?
 4. **Auto-ingestion** — If your calendar is connected, does the meeting appear and process within 15 minutes of it ending?
-5. **Reply parsing** — Reply to a Slack nudge DM or email nudge with "done" or "need another week" — does Verato pick it up correctly?
+5. **Reply parsing** — Reply to a Slack nudge DM or email nudge with "done" or "need another week" — does Verato pick it up correctly the next morning?
 6. **Slack buttons** — Tap Done or Need More Time on a Slack nudge — does the commitment update immediately?
 7. **Commitment actions** — Confirm, escalate, resolve, reopen — do they feel right?
 8. **Nudge flow** — Does the Slack DM arrive? Does the email send from your Gmail?
-9. **Risk scoring** — Does the At Risk / Overdue grouping match your intuition about which commitments are in trouble?
-10. **Notifications** — Do in-app notifications appear at the right times for the right people?
+9. **Risk score breakdown** — Does the breakdown (deadline / owner track record / recency) match your intuition about why a commitment is at risk?
+10. **Strategic Initiatives** — Does grouping commitments by initiative help you see the health of a theme at a glance?
+11. **Auto-tag** — Does Gemini's tag suggestion match what you would have chosen manually?
+12. **Notifications** — Do in-app notifications appear at the right times for the right people?
 
 ---
 
 ## Known Limitations (Beta)
 
 - **Slack nudges** require the org admin to connect Slack and enable the nudge engine in Settings first
-- **Gmail reply auto-parsing** runs every 15 minutes — not instant
-- **Slack reply parsing** runs every 15 minutes — not instant
+- **Gmail and Slack reply parsing** runs once daily at 08:00 UTC — not instant; Slack interactive buttons (Done / Need More Time / Blocked) update immediately
 - **Google Meet auto-ingest** requires the meeting organiser to have Google Workspace with transcription enabled in Drive; if transcription is off, Verato will detect this and fall back to manual upload
 - **Zoom auto-ingest** requires Zoom cloud recording to be enabled on the account
+- **Tag management** (rename, merge, delete) is admin-only — regular users can add and view tags
+- **Initiative AI summaries** regenerate at most once every 12 hours unless new commitment activity is logged
 - The app is in active development — some rough edges expected
 
 ---

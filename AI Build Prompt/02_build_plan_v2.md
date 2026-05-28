@@ -951,7 +951,45 @@ All existing call sites updated to pass the correct `recipient_user` per the rou
 
 ---
 
-### Phase 3B — Transcript Source Integrations ← NEXT
+### Phase 3B — Strategic Intelligence ✓ DONE
+
+**Goal:** Give the CoS strategic context on top of individual commitments — thematic grouping, AI health summaries, transparent risk scoring, and full AI call auditability.
+
+#### Sprint 1 — Strategic Initiatives (tag-based) ✓ DONE
+
+| Feature | Status | Notes |
+|---|---|---|
+| `CommitmentTag` model extended | ✓ DONE | Added `is_initiative`, `description`, `ai_summary`, `ai_summary_at` + index |
+| Migration 0006 | ✓ DONE | Adds 4 fields + `(organisation, is_initiative)` index |
+| `GET /api/v1/tags/` | ✓ DONE | Full tag list — id, label, usage, is_initiative, description |
+| `GET /api/v1/tags/search/` | ✓ DONE | Autocomplete with `?q=` prefix filter |
+| `PATCH /api/v1/tags/{id}/` | ✓ DONE | Rename, promote/demote, set description (admin only) |
+| `DELETE /api/v1/tags/{id}/` | ✓ DONE | Remove tag from all commitments (admin only) |
+| `POST /api/v1/tags/{id}/merge/` | ✓ DONE | Re-tag all commitments from source → target, delete source |
+| `POST /api/v1/tags/{id}/generate-summary/` | ✓ DONE | Gemini 2–3 sentence health summary; staleness guard (12h + no updates); `?force=true` override |
+| `GET /api/v1/initiatives/` | ✓ DONE | All initiative tags with per-status counts (active/at_risk/escalated/done/pending) |
+| `POST /api/v1/commitments/{id}/auto-tag/` | ✓ DONE | Gemini suggests 1–4 tags from org library, applies them |
+
+#### Sprint 2 — AI Call Logging ✓ DONE
+
+| Feature | Status | Notes |
+|---|---|---|
+| `AICallLog` model | ✓ DONE | In `prompts` app — captures prompt_name, prompt_version, input, output, duration_ms, success, error, organisation, meeting_id, commitment_id, tag_id, triggered_by |
+| `apps/prompts/logger.py` | ✓ DONE | Single `call_gemini()` entry point; all call sites route through here |
+| All 8 Gemini call sites instrumented | ✓ DONE | transcript extraction (pass1+pass2), import, Gmail reply, Slack reply, weekly digest, auto-tag, initiative summary |
+| `weekly_digest_intro` prompt seeded to DB | ✓ DONE | Was hardcoded in tasks.py — now admin-editable |
+| `AICallLog` admin | ✓ DONE | Read-only, filterable by prompt_name/success/date |
+
+#### Sprint 3 — Risk Score Breakdown ✓ DONE
+
+| Feature | Status | Notes |
+|---|---|---|
+| `compute_risk_breakdown()` | ✓ DONE | In `commitments/risk.py` — returns 3-component breakdown dict |
+| `risk_breakdown` serializer field | ✓ DONE | Exposed on `CommitmentSerializer` — no migration needed |
+
+---
+
+### Phase 3C — Transcript Source Integrations ← NEXT
 
 **Goal:** Ingest transcripts automatically from the tools CoS teams already use — without requiring Zoom cloud recording or Google Meet.
 
