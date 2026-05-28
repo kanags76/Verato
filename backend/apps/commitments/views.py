@@ -10,6 +10,25 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from drf_spectacular.types import OpenApiTypes
 
 from .models import Commitment, CommitmentEvent, CommitmentTag, EscalationEvent, ExtractionFeedback
+
+_AUTO_TAG_FALLBACK = (
+    'You are a tagging assistant for an executive commitment tracker.\n\n'
+    'Commitment: "{commitment_text}"\n\n'
+    'Existing tags in this organisation: {existing_tags}\n\n'
+    'Return a JSON array of 1-4 lowercase tag labels that best categorise this commitment. '
+    'Reuse existing tags where appropriate. Only create a new tag if the commitment clearly '
+    'belongs to a theme not covered by existing tags. Keep labels short (1-3 words). '
+    'Return ONLY the JSON array, nothing else. Example: ["product", "q2 roadmap"]'
+)
+
+_INITIATIVE_SUMMARY_FALLBACK = (
+    'You are summarising the status of a strategic initiative called "{initiative_label}" '
+    'for a Chief of Staff.\n\n'
+    'Initiative description: {description}\n\n'
+    'Active commitments under this initiative:\n{commitments_list}\n\n'
+    'Write a 2-3 sentence summary covering: overall health (on track / at risk / blocked), '
+    'key upcoming deadlines, and any red flags. Be direct and factual. No fluff.'
+)
 from .serializers import CommitmentSerializer, CommitmentEventSerializer, ResolveSerializer, CommitmentTagDetailSerializer
 from apps.accounts.models import MeetingManager
 from apps.accounts.views import get_user_org
@@ -554,15 +573,12 @@ class CommitmentViewSet(
         )
 
         from extraction.extractor import _call_gemini
+        from extraction.prompt_builder import _load_prompt
         existing_str = ', '.join(existing_labels) if existing_labels else '(none yet)'
-        prompt = (
-            f'You are a tagging assistant for an executive commitment tracker.\n\n'
-            f'Commitment: "{commitment.normalised_text}"\n\n'
-            f'Existing tags in this organisation: {existing_str}\n\n'
-            f'Return a JSON array of 1-4 lowercase tag labels that best categorise this commitment. '
-            f'Reuse existing tags where appropriate. Only create a new tag if the commitment clearly '
-            f'belongs to a theme not covered by existing tags. Keep labels short (1-3 words). '
-            f'Return ONLY the JSON array, nothing else. Example: ["product", "q2 roadmap"]'
+        template = _load_prompt('auto_tag', _AUTO_TAG_FALLBACK)
+        prompt = template.format(
+            commitment_text=commitment.normalised_text,
+            existing_tags=existing_str,
         )
         raw = _call_gemini(prompt)
         if not raw:
@@ -754,13 +770,12 @@ class CommitmentTagViewSet(
             lines.append(f'- [{c["status"]}] {c["normalised_text"]} (Owner: {owner}, Due: {deadline})')
 
         from extraction.extractor import _call_gemini
-        prompt = (
-            f'You are summarising the status of a strategic initiative called "{tag.label}" '
-            f'for a Chief of Staff.\n\n'
-            f'Initiative description: {tag.description or "(none)"}\n\n'
-            f'Active commitments under this initiative:\n' + '\n'.join(lines) + '\n\n'
-            f'Write a 2-3 sentence summary covering: overall health (on track / at risk / blocked), '
-            f'key upcoming deadlines, and any red flags. Be direct and factual. No fluff.'
+        from extraction.prompt_builder import _load_prompt
+        template = _load_prompt('initiative_summary', _INITIATIVE_SUMMARY_FALLBACK)
+        prompt = template.format(
+            initiative_label=tag.label,
+            description=tag.description or '(none)',
+            commitments_list='\n'.join(lines),
         )
         summary = _call_gemini(prompt)
         if not summary:
