@@ -752,11 +752,33 @@ class CommitmentTagViewSet(
 
     @action(detail=True, methods=['post'], url_path='generate-summary')
     def generate_summary(self, request, pk=None):
-        """Trigger Gemini to regenerate the AI summary for this initiative tag."""
+        """Trigger Gemini to regenerate the AI summary for this initiative tag.
+
+        Skips generation (returns cached summary) if:
+        - A summary was generated within the last 12 hours AND
+        - No associated commitment has been updated since that summary was generated.
+        Pass ?force=true to override.
+        """
         self._require_admin()
         tag = self.get_object()
         if not tag.is_initiative:
             return Response({'detail': 'Only initiative tags can have an AI summary.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.utils import timezone as tz
+        force = request.query_params.get('force', '').lower() == 'true'
+
+        if not force and tag.ai_summary and tag.ai_summary_at:
+            age = tz.now() - tag.ai_summary_at
+            if age.total_seconds() < 12 * 3600:
+                # Check if any commitment was updated after the last summary
+                has_updates = tag.commitments.filter(updated_at__gt=tag.ai_summary_at).exists()
+                if not has_updates:
+                    qs = CommitmentTag.objects.filter(pk=tag.pk).annotate(usage=Count('commitments'))
+                    return Response({
+                        **CommitmentTagDetailSerializer(qs.first()).data,
+                        'cached': True,
+                        'detail': 'Summary is current — no commitment updates since last generation.',
+                    })
 
         commitments = list(
             tag.commitments
@@ -791,7 +813,6 @@ class CommitmentTagViewSet(
         if not summary:
             return Response({'detail': 'AI summary generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
 
-        from django.utils import timezone as tz
         tag.ai_summary = summary.strip()
         tag.ai_summary_at = tz.now()
         tag.save(update_fields=['ai_summary', 'ai_summary_at'])
