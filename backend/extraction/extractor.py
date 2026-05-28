@@ -1,37 +1,9 @@
 import logging
 
-from google import genai
-from django.conf import settings
-
 from .prompt_builder import build_transcript_prompt, build_pass2_prompt
 from .parser import parse_extraction_response
 
 logger = logging.getLogger(__name__)
-
-
-def _get_client() -> genai.Client:
-    api_key = getattr(settings, 'GEMINI_API_KEY', None)
-    if api_key:
-        return genai.Client(api_key=api_key)
-    return genai.Client(
-        vertexai=True,
-        project=settings.GOOGLE_CLOUD_PROJECT,
-        location=settings.GOOGLE_CLOUD_LOCATION,
-    )
-
-
-def _call_gemini(prompt: str) -> str | None:
-    """Send a prompt to Gemini and return the raw text response. Returns None on failure."""
-    try:
-        client = _get_client()
-        response = client.models.generate_content(
-            model=settings.GEMINI_EXTRACTION_MODEL,
-            contents=prompt,
-        )
-        return response.text
-    except Exception as exc:
-        logger.error("Gemini call failed: %s", exc)
-        return None
 
 
 def extract_commitments(
@@ -39,6 +11,7 @@ def extract_commitments(
     participants: list[str],
     meeting_title: str = "",
     meeting_date: str = "",
+    log_context: dict | None = None,
 ) -> dict:
     """
     Pass 1 extraction. Returns commitments, topics, meeting_type, summary,
@@ -48,7 +21,10 @@ def extract_commitments(
     before calling extract_commitments_pass2.
 
     Never raises — returns empty defaults on failure.
+    log_context: optional dict with keys organisation, meeting_id passed to AICallLog.
     """
+    from apps.prompts.logger import call_gemini
+
     _empty = {"commitments": [], "topics": [], "meeting_type": "other",
               "summary": "", "participants": [], "clarifications": []}
 
@@ -56,7 +32,7 @@ def extract_commitments(
         return _empty
 
     prompt = build_transcript_prompt(transcript, participants, meeting_title, meeting_date)
-    raw = _call_gemini(prompt)
+    raw = call_gemini(prompt, 'transcript_extraction', **(log_context or {}))
     if raw is None:
         return _empty
 
@@ -77,6 +53,7 @@ def extract_commitments_pass2(
     clarifications: list[dict],
     meeting_title: str = "",
     meeting_date: str = "",
+    log_context: dict | None = None,
 ) -> dict:
     """
     Pass 2 extraction. Called after the CoS has answered all clarification questions.
@@ -85,6 +62,8 @@ def extract_commitments_pass2(
     Returns same shape as extract_commitments but clarifications will be [].
     Never raises.
     """
+    from apps.prompts.logger import call_gemini
+
     _empty = {"commitments": [], "topics": [], "meeting_type": "other",
               "summary": "", "participants": [], "clarifications": []}
 
@@ -92,7 +71,7 @@ def extract_commitments_pass2(
         return _empty
 
     prompt = build_pass2_prompt(transcript, participants, meeting_title, meeting_date, clarifications)
-    raw = _call_gemini(prompt)
+    raw = call_gemini(prompt, 'transcript_pass2', **(log_context or {}))
     if raw is None:
         return _empty
 
@@ -106,3 +85,7 @@ def extract_commitments_pass2(
     return result
 
 
+# Keep _call_gemini available for any legacy callers — delegates to logger
+def _call_gemini(prompt: str) -> str | None:
+    from apps.prompts.logger import call_gemini
+    return call_gemini(prompt, 'unknown')

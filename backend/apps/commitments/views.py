@@ -572,7 +572,7 @@ class CommitmentViewSet(
             .order_by('label')
         )
 
-        from extraction.extractor import _call_gemini
+        from apps.prompts.logger import call_gemini
         from extraction.prompt_builder import _load_prompt
         existing_str = ', '.join(existing_labels) if existing_labels else '(none yet)'
         template = _load_prompt('auto_tag', _AUTO_TAG_FALLBACK)
@@ -580,7 +580,12 @@ class CommitmentViewSet(
             commitment_text=commitment.normalised_text,
             existing_tags=existing_str,
         )
-        raw = _call_gemini(prompt)
+        raw = call_gemini(
+            prompt, 'auto_tag',
+            organisation=commitment.organisation,
+            commitment_id=commitment.id,
+            triggered_by=request.user,
+        )
         if not raw:
             return Response({'detail': 'AI tagging unavailable right now.'}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -769,7 +774,7 @@ class CommitmentTagViewSet(
             deadline = str(c['deadline']) if c['deadline'] else 'no deadline'
             lines.append(f'- [{c["status"]}] {c["normalised_text"]} (Owner: {owner}, Due: {deadline})')
 
-        from extraction.extractor import _call_gemini
+        from apps.prompts.logger import call_gemini
         from extraction.prompt_builder import _load_prompt
         template = _load_prompt('initiative_summary', _INITIATIVE_SUMMARY_FALLBACK)
         prompt = template.format(
@@ -777,7 +782,12 @@ class CommitmentTagViewSet(
             description=tag.description or '(none)',
             commitments_list='\n'.join(lines),
         )
-        summary = _call_gemini(prompt)
+        summary = call_gemini(
+            prompt, 'initiative_summary',
+            organisation=get_user_org(request),
+            tag_id=tag.id,
+            triggered_by=request.user,
+        )
         if not summary:
             return Response({'detail': 'AI summary generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
 

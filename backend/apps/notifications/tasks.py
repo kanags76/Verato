@@ -174,7 +174,7 @@ def send_weekly_digest():
         at_risk  = [c for c in commitments if c.risk_score >= 0.7 and not (c.deadline and c.deadline < today)]
         on_track = [c for c in commitments if c.risk_score < 0.7 and not (c.deadline and c.deadline < today)]
 
-        intro = _generate_digest_intro(org.name, overdue, at_risk, on_track)
+        intro = _generate_digest_intro(org.name, overdue, at_risk, on_track, organisation=org)
         context = {'org_name': org.name, 'intro': intro, 'overdue': overdue,
                    'at_risk': at_risk, 'on_track': on_track, 'today': today}
         html_body = render_to_string('emails/weekly_digest.html', context)
@@ -211,26 +211,32 @@ def _iter_orgs_with_email_users():
     return Organisation.objects.filter(users__email__gt='').distinct()
 
 
-def _generate_digest_intro(org_name, overdue, at_risk, on_track) -> str:
+def _generate_digest_intro(org_name, overdue, at_risk, on_track, organisation=None) -> str:
+    from apps.prompts.logger import call_gemini
+    from extraction.prompt_builder import _load_prompt
+
+    _FALLBACK = (
+        "Write a 2-3 sentence executive summary for {org_name}'s weekly commitment digest. "
+        "{overdue_count} overdue, {at_risk_count} at-risk, {on_track_count} on-track. "
+        "Be concise and action-oriented. Plain text only."
+    )
     try:
-        from google import genai
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        prompt = (
-            f"Write a 2-3 sentence executive summary for {org_name}'s weekly commitment digest. "
-            f"{len(overdue)} overdue, {len(at_risk)} at-risk, {len(on_track)} on-track. "
-            f"Be concise and action-oriented. Plain text only."
+        template = _load_prompt('weekly_digest_intro', _FALLBACK)
+        prompt = template.format(
+            org_name=org_name,
+            overdue_count=len(overdue),
+            at_risk_count=len(at_risk),
+            on_track_count=len(on_track),
         )
-        response = client.models.generate_content(
-            model=settings.GEMINI_EXTRACTION_MODEL,
-            contents=prompt,
-        )
-        return response.text.strip()
+        result = call_gemini(prompt, 'weekly_digest_intro', organisation=organisation)
+        if result:
+            return result.strip()
     except Exception as exc:
         logger.warning("Gemini digest intro failed: %s", exc)
-        return (
-            f"Here is your weekly commitment summary for {org_name}. "
-            f"{len(overdue)} overdue, {len(at_risk)} at risk, {len(on_track)} on track."
-        )
+    return (
+        f"Here is your weekly commitment summary for {org_name}. "
+        f"{len(overdue)} overdue, {len(at_risk)} at risk, {len(on_track)} on track."
+    )
 
 
 @shared_task
@@ -277,7 +283,10 @@ def poll_gmail_replies():
                     continue
 
                 deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'none'
-                parsed = parse_reply_with_gemini(commitment.normalised_text, deadline_str, reply_body)
+                parsed = parse_reply_with_gemini(
+                    commitment.normalised_text, deadline_str, reply_body,
+                    log_context={'organisation': commitment.organisation, 'commitment_id': commitment.id},
+                )
 
                 intent   = parsed.get('intent', 'no_update')
                 note     = parsed.get('note', reply_body[:200])
@@ -423,7 +432,10 @@ def poll_slack_replies():
                     continue
 
                 deadline_str = commitment.deadline.strftime('%-d %b %Y') if commitment.deadline else 'none'
-                parsed = parse_reply_with_gemini(commitment.normalised_text, deadline_str, reply_body)
+                parsed = parse_reply_with_gemini(
+                    commitment.normalised_text, deadline_str, reply_body,
+                    log_context={'organisation': commitment.organisation, 'commitment_id': commitment.id},
+                )
 
                 intent   = parsed.get('intent', 'no_update')
                 note     = parsed.get('note', reply_body[:200])

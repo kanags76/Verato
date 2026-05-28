@@ -134,6 +134,7 @@ def process_meeting(self, meeting_id: str):
             participants,
             meeting_title=meeting.title,
             meeting_date=meeting.occurred_at.date().isoformat(),
+            log_context={'organisation': meeting.organisation, 'meeting_id': meeting.id},
         )
 
         org = meeting.organisation
@@ -236,6 +237,7 @@ def process_meeting_pass2(self, meeting_id: str):
             clarifications=clarifications,
             meeting_title=meeting.title,
             meeting_date=meeting.occurred_at.date().isoformat(),
+            log_context={'organisation': meeting.organisation, 'meeting_id': meeting.id},
         )
 
         org = meeting.organisation
@@ -301,7 +303,10 @@ def process_import(self, meeting_id: str):
     meeting.save(update_fields=['processing_status'])
 
     try:
-        result = extract_from_document(meeting.raw_transcript)
+        result = extract_from_document(
+            meeting.raw_transcript,
+            log_context={'organisation': meeting.organisation, 'meeting_id': meeting.id},
+        )
 
         org = meeting.organisation
         created = 0

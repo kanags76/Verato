@@ -198,27 +198,29 @@ _GMAIL_REPLY_PARSE_FALLBACK = (
 )
 
 
-def parse_reply_with_gemini(commitment_text: str, deadline_str: str, reply_body: str) -> dict:
+def parse_reply_with_gemini(
+    commitment_text: str,
+    deadline_str: str,
+    reply_body: str,
+    log_context: dict | None = None,
+) -> dict:
     """
     Use Gemini to extract intent + summary from an email reply.
     Returns: { intent, note, suggested_deadline }
     Prompt is loaded from the DB (prompts.gmail_reply_parse) so it can be edited in admin.
     """
+    from apps.prompts.logger import call_gemini
     try:
-        from google import genai
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
         template = _load_prompt('gmail_reply_parse', _GMAIL_REPLY_PARSE_FALLBACK)
         prompt = template.format(
             commitment_text=commitment_text,
             deadline_str=deadline_str,
             reply_body=reply_body[:2000],
         )
-        response = client.models.generate_content(
-            model=settings.GEMINI_EXTRACTION_MODEL,
-            contents=prompt,
-        )
-        text = response.text.strip()
-        # Strip markdown code fences if present
+        raw = call_gemini(prompt, 'gmail_reply_parse', **(log_context or {}))
+        if not raw:
+            return {'intent': 'no_update', 'note': reply_body[:200], 'suggested_deadline': None}
+        text = raw.strip()
         if '```' in text:
             parts = text.split('```')
             for part in parts:
