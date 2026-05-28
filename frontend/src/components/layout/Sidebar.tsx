@@ -6,7 +6,8 @@ import {
   Settings, 
   LogOut,
   ChevronRight,
-  User
+  User,
+  Target
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/src/contexts/AuthContext";
@@ -18,6 +19,7 @@ import { APP_VERSION } from "../../types";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: Target, label: "Initiatives", path: "/initiatives" },
   { icon: Calendar, label: "Meetings", path: "/meetings" },
   { icon: Users, label: "Directory", path: "/people" },
   { icon: Settings, label: "Settings", path: "/settings" },

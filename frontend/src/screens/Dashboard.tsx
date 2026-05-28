@@ -1,4 +1,4 @@
-import { useState, MouseEvent, useRef, DragEvent, ChangeEvent } from "react";
+import { useState, useEffect, MouseEvent, useRef, DragEvent, ChangeEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   AlertCircle, 
@@ -22,7 +22,7 @@ import {
   Loader2
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { commitmentService, dashboardService, tagService, importService, meetingService, personService } from "@/src/lib/api/services";
+import { commitmentService, dashboardService, tagService, importService, meetingService, personService, initiativeService } from "@/src/lib/api/services";
 import { Link, useNavigate } from "react-router-dom";
 import { Card } from "@/src/components/ui/Card";
 import { Badge } from "@/src/components/ui/Badge";
@@ -88,6 +88,11 @@ export const Dashboard = () => {
   const { data: statsData } = useQuery({
     queryKey: ['dashboardStats'],
     queryFn: dashboardService.getStats,
+  });
+
+  const { data: initiatives } = useQuery({
+    queryKey: ['initiatives'],
+    queryFn: initiativeService.getAll,
   });
 
   const extractCommitments = (data: any) => {
@@ -421,45 +426,60 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-5">
-        {statCards.map((stat, idx) => (
-            <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            onClick={() => setActiveTab(prev => prev === stat.id ? "all" : stat.id)}
-            className="cursor-pointer group h-full"
-          >
-            <Card className={cn(
-              "relative h-full overflow-hidden bg-white shadow-sm transition-all border-slate-200 hover:shadow-md flex flex-col justify-between py-2.5 px-4",
-              activeTab === stat.id && "ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/10"
-            )}>
-              <div className="flex items-start justify-between relative z-10 mb-2">
-                <div className={cn("p-1.5 rounded-lg", stat.bg)}>
-                  <stat.icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4", stat.color)} />
+      {/* Commitments & Stats row */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-black uppercase text-slate-400 tracking-wider">Commitments</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-5">
+            {statCards.map((stat, idx) => (
+                <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                onClick={() => setActiveTab(prev => prev === stat.id ? "all" : stat.id)}
+                className="cursor-pointer group h-full"
+            >
+                <Card className={cn(
+                "relative h-full overflow-hidden bg-white shadow-sm transition-all border-slate-200 hover:shadow-md flex flex-col justify-between py-2.5 px-4",
+                activeTab === stat.id && "ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/10"
+                )}>
+                <div className="flex items-start justify-between relative z-10 mb-2">
+                    <div className={cn("p-1.5 rounded-lg", stat.bg)}>
+                    <stat.icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4", stat.color)} />
+                    </div>
                 </div>
-              </div>
-              
-              <div className="relative z-10 w-full overflow-hidden">
-                <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5 leading-none truncate" title={stat.label}>
-                  {stat.label}
-                </p>
-                <p className="text-xl md:text-2xl font-black text-slate-900 font-mono tracking-tighter">
-                  {stat.count}
-                </p>
-              </div>
+                
+                <div className="relative z-10 w-full overflow-hidden">
+                    <p className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5 leading-none truncate" title={stat.label}>
+                    {stat.label}
+                    </p>
+                    <p className="text-xl md:text-2xl font-black text-slate-900 font-mono tracking-tighter">
+                    {stat.count}
+                    </p>
+                </div>
 
-              {/* Decorative background element */}
-              <div className={cn(
-                "absolute -right-4 -bottom-4 w-20 h-20 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity", 
-                stat.bg
-              )} />
-            </Card>
-          </motion.div>
-        ))}
+                {/* Decorative background element */}
+                <div className={cn(
+                    "absolute -right-4 -bottom-4 w-20 h-20 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity", 
+                    stat.bg
+                )} />
+                </Card>
+            </motion.div>
+            ))}
+        </div>
       </div>
+
+      {/* Initiatives row */}
+      {initiatives && initiatives.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-black uppercase text-slate-400 tracking-wider">Strategic Initiatives</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {initiatives.map((ini: any) => (
+              <InitiativeCard key={ini.id} initiative={ini} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main content table area */}
       <div className="space-y-6">
@@ -903,6 +923,48 @@ export const Dashboard = () => {
       </AnimatePresence>
       <ImportSuccessModal isOpen={isSuccessOpen} onClose={() => setIsSuccessOpen(false)} />
     </div>
+  );
+};
+
+const InitiativeCard = ({ initiative }: { initiative: any }) => {
+  const navigate = useNavigate();
+  const [summary, setSummary] = useState(initiative.ai_summary || initiative.summary || "");
+  const [lastGenerated, setLastGenerated] = useState(initiative.summary_updated_at || null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const lastDate = lastGenerated ? new Date(lastGenerated) : null;
+    
+    if (!summary || !lastDate || lastDate < twentyFourHoursAgo) {
+      setIsLoading(true);
+      initiativeService.generateSummary(initiative.id)
+        .then((data) => {
+          setSummary(data.ai_summary || data.summary);
+          setLastGenerated(data.summary_updated_at || new Date().toISOString());
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [initiative.id]);
+
+  return (
+    <Card className="p-4 group border-slate-200 shadow-sm hover:border-blue-500 transition-all">
+        <h3 className="font-bold text-sm text-slate-900 mb-2">{initiative.label}</h3>
+        {isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 className="animate-spin w-3 h-3" /> Generating summary...
+            </div>
+        ) : (
+            <p className="text-xs text-slate-500 leading-relaxed mb-4">{summary || "No AI summary available."}</p>
+        )}
+        <Button
+            variant="secondary"
+            className="w-full text-xs font-black uppercase"
+            onClick={() => navigate(`/initiatives/${initiative.id}`)}
+        >
+            View Details
+        </Button>
+    </Card>
   );
 };
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { 
@@ -253,14 +253,16 @@ export const MeetingDetail = () => {
     }
   })();
 
+  const navigate = useNavigate();
+
   return (
     <div className="max-w-6xl mx-auto space-y-10">
       {/* Breadcrumbs / Back navigation */}
       <div className="flex items-center gap-2 text-sm font-bold text-slate-400">
-        <Link to="/meetings" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+        <button onClick={() => navigate(-1)} className="hover:text-blue-600 transition-colors flex items-center gap-1">
           <ArrowLeft className="w-4 h-4" />
-          Meetings
-        </Link>
+          Back
+        </button>
         <ChevronRight className="w-3 h-3" />
         <span className="text-slate-900">Meeting Details</span>
       </div>

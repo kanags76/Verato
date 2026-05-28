@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.2';
+export const APP_VERSION = '2.3';
 
 export interface Commitment {
   id: string;
@@ -36,6 +36,28 @@ export interface Commitment {
     deadline: number;
     owner: number;
     recency: number;
+  };
+  risk_breakdown?: {
+    total: number;
+    deadline_proximity: {
+      raw_score: number;
+      weight: number;
+      contribution: number;
+      label: string;
+    };
+    owner_track_record: {
+      raw_score: number;
+      weight: number;
+      contribution: number;
+      label: string;
+      delivery_rate: number | null;
+    };
+    update_recency: {
+      raw_score: number;
+      weight: number;
+      contribution: number;
+      label: string;
+    };
   };
 }
 

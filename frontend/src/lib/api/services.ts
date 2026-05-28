@@ -101,6 +101,10 @@ export const commitmentService = {
     const { data } = await apiClient.post(`commitments/${id}/nudge/`, { method });
     return data;
   },
+  autoTag: async (id: string): Promise<Commitment> => {
+    const { data } = await apiClient.post<Commitment>(`commitments/${id}/auto-tag/`);
+    return data;
+  },
   getHistory: async (id: string): Promise<CommitmentHistory[]> => {
     const { data } = await apiClient.get<any>(`commitments/${id}/history/`);
     if (!data) return [];
@@ -280,9 +284,32 @@ export const personService = {
   },
 };
 
+export const initiativeService = {
+  getAll: async (): Promise<any[]> => {
+    const { data } = await apiClient.get<any[]>('initiatives/');
+    return data || [];
+  },
+  generateSummary: async (id: string): Promise<any> => {
+    const { data } = await apiClient.post(`tags/${id}/generate-summary/`);
+    return data;
+  },
+};
+
 export const tagService = {
   getAll: async (): Promise<string[]> => {
     const { data } = await apiClient.get<string[]>('tags/');
+    return data;
+  },
+  searchTags: async (): Promise<any[]> => {
+    const { data } = await apiClient.get<any[]>('tags/search/');
+    return data || [];
+  },
+  updateTag: async (id: string, payload: { label?: string; is_initiative?: boolean; description?: string }): Promise<any> => {
+    const { data } = await apiClient.patch(`tags/${id}/`, payload);
+    return data;
+  },
+  mergeTag: async (id: string, intoLabel: string): Promise<any> => {
+    const { data } = await apiClient.post(`tags/${id}/merge/`, { into: intoLabel });
     return data;
   },
 };

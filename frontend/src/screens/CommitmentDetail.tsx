@@ -19,7 +19,8 @@ import {
   X,
   Check,
   AlertCircle,
-  Loader2
+  Loader2,
+  Tag
 } from "lucide-react";
 import { Card } from "@/src/components/ui/Card";
 import { Button } from "@/src/components/ui/Button";
@@ -126,6 +127,18 @@ export const CommitmentDetail = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['commitment', id] });
       queryClient.invalidateQueries({ queryKey: ['commitments'] });
+    }
+  });
+
+  const autoTagMutation = useMutation({
+    mutationFn: () => commitmentService.autoTag(id!),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['commitment', id] });
+      queryClient.invalidateQueries({ queryKey: ['commitments'] });
+      // Toast message
+      setNudgeMessage({ type: 'success', text: `Tags applied: ${data.tags?.join(', ') || 'none'}` });
+      setTimeout(() => setNudgeMessage(null), 5000);
+      setEditedTags(data.tags || []);
     }
   });
 
@@ -362,7 +375,7 @@ export const CommitmentDetail = () => {
     if (hasChanges) {
       setShowConfirmBack(true);
     } else {
-      navigate("/dashboard");
+      navigate(-1);
     }
   };
 
@@ -454,6 +467,19 @@ export const CommitmentDetail = () => {
                 )}
               </div>
               <div className="flex flex-wrap gap-2 pt-1 min-h-[32px] items-center">
+                {canEdit && (
+                  <button
+                    onClick={() => autoTagMutation.mutate()}
+                    disabled={autoTagMutation.isPending}
+                    className={cn(
+                      "h-6 flex items-center justify-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all mr-2",
+                      autoTagMutation.isPending ? "bg-slate-100 text-slate-400 border-slate-200" : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+                    )}
+                  >
+                    {autoTagMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin"/> : <Tag className="w-3 h-3" />}
+                    Auto-tag
+                  </button>
+                )}
                 {editedTags.map((tag, idx) => (
                   <Badge 
                     key={`tag-${tag}-${idx}`} 
@@ -789,52 +815,70 @@ export const CommitmentDetail = () => {
           <div className="lg:col-span-12 space-y-12">
             
             {/* Risk Score Component */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8 bg-slate-50 border border-slate-200 rounded-3xl">
-              <div className="md:col-span-4 flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-200 pb-8 md:pb-0 md:pr-8">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Risk Severity</span>
+            {displayCommitment.risk_breakdown && (
+              <div className="p-5 bg-white border border-slate-100 rounded-[28px] flex items-center gap-6 shadow-sm">
+                {/* Left Panel: Risk Severity */}
+                <div className="w-[30%] flex flex-col justify-center border-r border-slate-100 pr-6">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">RISK SEVERITY</span>
                   <div className={cn(
-                    "text-3xl font-black font-mono",
-                    riskScore > 0.6 ? "text-rose-600" : riskScore > 0.3 ? "text-amber-600" : "text-emerald-600"
+                    "text-3xl font-black mt-1",
+                    displayCommitment.risk_breakdown.total < 0.40 ? "text-emerald-500" : displayCommitment.risk_breakdown.total < 0.70 ? "text-amber-500" : "text-red-500"
                   )}>
-                    {(riskScore * 100).toFixed(0)}%
+                    {(displayCommitment.risk_breakdown.total * 100).toFixed(0)}%
                   </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-3 mb-3">
+                    <div 
+                      className={cn(
+                        "h-full rounded-full",
+                        displayCommitment.risk_breakdown.total < 0.40 ? "bg-emerald-500" : displayCommitment.risk_breakdown.total < 0.70 ? "bg-amber-500" : "bg-red-500"
+                      )}
+                      style={{ width: `${displayCommitment.risk_breakdown.total * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold leading-relaxed uppercase tracking-wide">
+                    Combined signal from deadline proximity, owner historical reliability, and record recency.
+                  </p>
                 </div>
-                <div className="h-3 w-full bg-slate-200/50 rounded-full overflow-hidden shadow-inner mb-4">
-                  <div 
-                    className={cn(
-                      "h-full transition-all duration-1000 ease-out",
-                      riskScore > 0.6 ? "bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.3)]" : riskScore > 0.3 ? "bg-amber-500" : "bg-emerald-500"
-                    )}
-                    style={{ width: `${riskScore * 100}%` }}
-                  />
-                </div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed tracking-wider">
-                  Combined signal from deadline proximity, owner historical reliability, and record recency.
-                </p>
-              </div>
 
-              <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                {[
-                  { label: "Deadline", weight: 50, score: breakdown.deadline, color: "bg-rose-400" },
-                  { label: "Owner", weight: 35, score: breakdown.owner, color: "bg-blue-400" },
-                  { label: "Recency", weight: 15, score: breakdown.recency, color: "bg-slate-400" },
-                ].map((factor) => (
-                  <div key={factor.label} className="space-y-3">
-                    <div className="flex justify-between items-end">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{factor.label}</span>
-                      <span className="text-[10px] font-mono font-bold text-slate-400">{factor.weight}% Wt.</span>
+                {/* Right Panel: Factor Mini-cards */}
+                <div className="w-[70%] grid grid-cols-3 gap-4">
+                  {[
+                    { 
+                      label: "DEADLINE", 
+                      weight: displayCommitment.risk_breakdown.deadline_proximity.weight * 100, 
+                      score: displayCommitment.risk_breakdown.deadline_proximity.raw_score * 100, 
+                      barClass: "bg-rose-400",
+                      tooltip: displayCommitment.risk_breakdown.deadline_proximity.label
+                    },
+                    { 
+                      label: "OWNER", 
+                      weight: displayCommitment.risk_breakdown.owner_track_record.weight * 100, 
+                      score: displayCommitment.risk_breakdown.owner_track_record.raw_score * 100, 
+                      barClass: "bg-blue-400",
+                      tooltip: displayCommitment.risk_breakdown.owner_track_record.label
+                    },
+                    { 
+                      label: "RECENCY", 
+                      weight: displayCommitment.risk_breakdown.update_recency.weight * 100, 
+                      score: displayCommitment.risk_breakdown.update_recency.raw_score * 100, 
+                      barClass: "bg-slate-400",
+                      tooltip: displayCommitment.risk_breakdown.update_recency.label
+                    },
+                  ].map((factor) => (
+                    <div key={factor.label} className="bg-slate-50 rounded-2xl px-4 py-3 flex flex-col gap-2" title={factor.tooltip}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{factor.label}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{factor.weight}% Wt.</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                        <div className={cn("h-full rounded-full", factor.barClass)} style={{ width: `${factor.score}%` }} />
+                      </div>
+                      <span className="font-black text-slate-700 text-sm">{factor.score.toFixed(0)}%</span>
                     </div>
-                    <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm flex items-center justify-between">
-                       <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
-                          <div className={cn("h-full", factor.color)} style={{ width: `${factor.score}%` }} />
-                       </div>
-                       <span className="text-xs font-black text-slate-900">{factor.score}%</span>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Original Quote */}
             <div className="space-y-6">

@@ -9,6 +9,8 @@ import { AppShell } from "./components/layout/AppShell";
 import { Dashboard } from "./screens/Dashboard";
 import { People } from "./screens/People";
 import { Settings } from "./screens/Settings";
+import { InitiativeDetail } from "./screens/InitiativeDetail";
+import { Initiatives } from "./screens/Initiatives";
 import { Meetings } from "./screens/Meetings";
 import { MeetingDetail } from "./screens/MeetingDetail";
 import { CommitmentDetail } from "./screens/CommitmentDetail";
@@ -88,6 +90,8 @@ export default function App() {
               <Route path="/meetings" element={<ProtectedRoute><AppShell><Meetings /></AppShell></ProtectedRoute>} />
               <Route path="/meetings/:id" element={<ProtectedRoute><AppShell><MeetingDetail /></AppShell></ProtectedRoute>} />
               <Route path="/people" element={<ProtectedRoute><AppShell><People /></AppShell></ProtectedRoute>} />
+              <Route path="/initiatives" element={<ProtectedRoute><AppShell><Initiatives /></AppShell></ProtectedRoute>} />
+              <Route path="/initiatives/:id" element={<ProtectedRoute><AppShell><InitiativeDetail /></AppShell></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><AppShell><Settings /></AppShell></ProtectedRoute>} />
             </Routes>
           </Router>
