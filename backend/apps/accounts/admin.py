@@ -30,9 +30,10 @@ class OrganisationAdminForm(forms.ModelForm):
         help_text='Check Gmail nudge threads for owner replies and auto-update commitments.',
     )
     GMAIL_INTERVAL_CHOICES = [(15, 'Every 15 minutes'), (30, 'Every 30 minutes'),
-                              (60, 'Every hour'), (120, 'Every 2 hours')]
+                              (60, 'Every hour'), (120, 'Every 2 hours'),
+                              (1440, 'Every 24 hours')]
     gmail_poll_interval_minutes = forms.ChoiceField(
-        choices=GMAIL_INTERVAL_CHOICES, required=False, initial=30,
+        choices=GMAIL_INTERVAL_CHOICES, required=False, initial=1440,
         label='Gmail poll frequency',
         help_text='How often to check for email replies from owners.',
     )
@@ -49,7 +50,7 @@ class OrganisationAdminForm(forms.ModelForm):
             self.fields['nudge_first_days_before'].initial   = s.get('nudge_first_days_before', 2)
             self.fields['nudge_second_hours_before'].initial = s.get('nudge_second_hours_before', 48)
             self.fields['gmail_polling_enabled'].initial         = s.get('gmail_polling_enabled', False)
-            self.fields['gmail_poll_interval_minutes'].initial   = s.get('gmail_poll_interval_minutes', 30)
+            self.fields['gmail_poll_interval_minutes'].initial   = s.get('gmail_poll_interval_minutes', 1440)
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -58,7 +59,7 @@ class OrganisationAdminForm(forms.ModelForm):
         s['nudge_first_days_before']   = int(self.cleaned_data['nudge_first_days_before'])
         s['nudge_second_hours_before'] = int(self.cleaned_data['nudge_second_hours_before'])
         s['gmail_polling_enabled']         = bool(self.cleaned_data.get('gmail_polling_enabled', False))
-        s['gmail_poll_interval_minutes']   = int(self.cleaned_data.get('gmail_poll_interval_minutes', 30))
+        s['gmail_poll_interval_minutes']   = int(self.cleaned_data.get('gmail_poll_interval_minutes', 1440))
         instance.settings = s
         if commit:
             instance.save()
@@ -102,7 +103,7 @@ class OrganisationAdmin(admin.ModelAdmin):
 
     @admin.display(description='Poll every')
     def gmail_poll_interval(self, obj):
-        mins = (obj.settings or {}).get('gmail_poll_interval_minutes', 30)
+        mins = (obj.settings or {}).get('gmail_poll_interval_minutes', 1440)
         return f'{mins} min' if mins < 60 else f'{mins // 60}h'
 
     @admin.display(description='1st nudge')
