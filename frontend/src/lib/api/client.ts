@@ -17,6 +17,20 @@ apiClient.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token!);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -24,7 +38,20 @@ apiClient.interceptors.response.use(
     
     // If the error is 401 and not already a retry
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
+
       const refreshToken = localStorage.getItem('refreshToken');
       
       if (refreshToken) {
@@ -37,10 +64,16 @@ apiClient.interceptors.response.use(
           const { access } = response.data;
           localStorage.setItem('accessToken', access);
           
+          isRefreshing = false;
+          processQueue(null, access);
+          
           // Retry the original request with the new token
           originalRequest.headers.Authorization = `Bearer ${access}`;
           return apiClient(originalRequest);
         } catch (refreshError: any) {
+          isRefreshing = false;
+          processQueue(refreshError, null);
+          
           if (refreshError.response?.status === 401 || refreshError.response?.status === 403) {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');

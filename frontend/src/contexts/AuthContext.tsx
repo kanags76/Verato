@@ -45,34 +45,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  React.useEffect(() => {
-    if (!token || !refreshToken) return;
-
-    // 58-minute access token refresh rule
-    const REFRESH_INTERVAL_MS = 58 * 60 * 1000;
-    
-    // Use lastRefreshTimestamp or fallback to loginTimestamp
-    const baseTime = lastRefreshTimestamp || loginTimestamp || Date.now();
-    const timeSinceLastRefresh = Date.now() - baseTime;
-    const timeUntilNextRefresh = Math.max(1000, REFRESH_INTERVAL_MS - timeSinceLastRefresh);
-    
-    const refreshTimeout = setTimeout(async () => {
-      try {
-        const data = await authService.refresh(refreshToken);
-        setTokens(data, false); // Update tokens but preserve login timestamp
-      } catch (e: any) {
-        console.error("Session refresh failed", e);
-        if (e.response?.status === 401 || e.response?.status === 403) {
-          logout();
-        }
-      }
-    }, timeUntilNextRefresh);
-
-    return () => {
-      clearTimeout(refreshTimeout);
-    };
-  }, [token, refreshToken, lastRefreshTimestamp, loginTimestamp]);
-
   const setTokens = (data: TokenResponse, isNewLogin: boolean = true) => {
     localStorage.setItem('accessToken', data.access);
     localStorage.setItem('refreshToken', data.refresh);
