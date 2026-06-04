@@ -2,6 +2,28 @@
 
 Accountability layer for organisations. Extracts every commitment made in meetings, assigns it an owner, scores risk, and nudges before it slips.
 
+---
+
+## What is this?
+
+A Chief of Staff sits in 10–15 meetings a week. Every meeting produces commitments — "I'll get you the numbers by Thursday", "we'll have a proposal ready end of month", "John's team will send the draft by Friday." These promises are made verbally, captured nowhere, and followed up manually.
+
+The result: hours spent chasing people, things slipping through the cracks, and the CoS finding out too late to intervene.
+
+Verato fixes this. Connect your Google Meet or Zoom account once. When a meeting ends, Verato pulls the transcript, sends it to Gemini AI, and extracts every commitment — who promised what, to whom, by when. It scores each one for risk, sends automatic nudges to owners via Slack or Gmail, and reads their replies to update status automatically. When something is about to slip, the CoS knows before it does.
+
+**Who it's for:** Chiefs of Staff, Executive Assistants, and Heads of Operations at companies of 20–200 people who are managing commitments across a leadership team and currently doing it in spreadsheets or nothing at all.
+
+**What's built:**
+- Google Meet + Zoom auto-ingestion — meetings processed within 15 minutes of ending
+- Gemini AI commitment extraction with owner, deadline, and confidence score
+- Risk scoring with full breakdown (deadline proximity, owner track record, update recency)
+- Slack and Gmail nudges with automatic reply parsing
+- Strategic Initiatives — group commitments by theme with AI-generated health summaries
+- In-app notifications, delegation, team management, and a full audit trail per commitment
+
+---
+
 **Stack:** Django REST API · React/Vite · PostgreSQL · Redis · Celery · Gemini AI · Slack · Gmail OAuth · Google Calendar · Google Meet · Zoom
 **Licence:** AGPL-3.0
 **Repo:** https://github.com/kanags76/Verato
