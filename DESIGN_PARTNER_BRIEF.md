@@ -39,12 +39,15 @@ When a deadline approaches, Verato sends a Slack DM or email nudge to the action
 
 Verato is in private beta with a working product:
 
+- **Guided onboarding** — new users are walked through connecting Slack and importing an existing commitment tracker before reaching the dashboard, so the product is useful from the first session
 - **Google Meet and Zoom auto-ingestion** — meetings processed automatically within 15 minutes of ending
+- **Tracker import** — upload a spreadsheet, CSV, or document of existing commitments at any time; Gemini extracts them just like a live transcript
 - **Gemini AI extraction** — commitments pulled from transcripts with owner, deadline, and confidence score
 - **Risk scoring with breakdown** — live score per commitment showing exactly how much deadline proximity, owner track record, and update recency each contribute
 - **Slack and Gmail nudges** — automatic DM and email nudges on a configurable schedule
 - **Reply parsing** — Gemini reads owner replies and updates status automatically; ambiguous replies surface the full text to the CoS for review
 - **Slack interactive buttons** — owners tap Done / Need More Time / Blocked directly in Slack
+- **Log Manual Update** — CoS can record verbal updates or out-of-band responses directly to the commitment history
 - **Strategic Initiatives** — tag-based grouping of commitments into named initiatives (Q3 Launch, Board Prep, etc.) with AI-generated health summaries and per-status counts
 - **Auto-tagging** — Gemini suggests tags for any commitment from your existing tag library in one click
 - **Delegation** — CoS can assign a colleague to manage meetings on their behalf

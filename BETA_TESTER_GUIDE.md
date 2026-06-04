@@ -10,8 +10,10 @@ Verato is your Chief of Staff's command centre. It automatically extracts every 
 **Step 1 — Create your account**
 Go to the app URL and click **Register**. Enter your name, email, and password. You will receive a verification email — click the link to activate your account. This creates your organisation in Verato — you are the admin.
 
-**Step 2 — Invite your team**
-Go to **Settings → Team** and invite colleagues by email. They will receive an invite link. You can resend or revoke invites at any time. Once they register, their Person record is automatically linked to their user account.
+**Step 2 — Complete the onboarding flow**
+After activating your account, Verato walks you through a two-step setup:
+- **Connect Slack** — Authorise Verato to send nudge DMs to commitment owners. You can skip this and connect later from Settings.
+- **Import your existing tracker** — Upload a spreadsheet, document, or CSV of existing commitments so Verato can start with your current backlog rather than from zero. You can also paste text directly. Skip if you are starting fresh.
 
 **Step 3 — Connect your calendar and meeting tools**
 Go to **Settings** and connect the integrations that apply to your team:
@@ -21,7 +23,7 @@ Go to **Settings** and connect the integrations that apply to your team:
 - **Slack** — Verato sends nudge DMs and reads owners' replies in the thread.
 
 **Step 4 — Upload your first meeting (or let auto-ingest do it)**
-If your calendar is connected, Verato will pick up new meetings automatically. You can also click **Upload** from the dashboard to paste a transcript or upload a `.txt`, `.docx`, or `.csv` file. Processing takes 15–30 seconds.
+If your calendar is connected, Verato will pick up new meetings automatically. You can also click **Upload** from the dashboard to paste a transcript or upload a `.txt`, `.docx`, or `.csv` file. Processing takes 15–30 seconds. The **Import Tasks** button on the dashboard lets you import from an existing tracker at any time, not just during onboarding.
 
 **Step 5 — Review and confirm commitments**
 After processing, go to the meeting and review the extracted commitments. Each one shows the owner, deadline, and a confidence score. Confirm the ones that look right, edit any that need fixing (owner, deadline, wording), and reject anything that isn't actually a commitment.
@@ -36,8 +38,14 @@ Your main view. Shows commitments grouped by status: Overdue, At Risk, On Track.
 **Commitment Detail**
 Full view of a single commitment — the original text, normalised version, owner, deadline, risk score, and full history of every action taken. You can reassign the owner, change the deadline, escalate, resolve (done / deferred / cancelled), or reopen it.
 
+**Import Tasks**
+Available from the **Import Tasks** button on the dashboard at any time. Upload a spreadsheet, document, or CSV of existing commitments and Verato will extract them with AI just like a meeting transcript. Useful for migrating your current backlog on day one or importing a batch of commitments from an offline source.
+
 **Manual Nudge**
 On any commitment, click **Nudge**. Choose your method — Slack DM, Email, Phone, In Person. If Gmail is connected, email sends directly from your Gmail account. All nudges are logged in the commitment history so there is a full record.
+
+**Log Manual Update**
+On any commitment, use **Log Update** to record a response you received outside the system — a verbal update in a meeting, a WhatsApp message, a note from a call. The update is saved to the commitment history with a timestamp, keeping the full paper trail in one place.
 
 **Automatic Nudges with Reply Parsing**
 Verato sends automatic nudge DMs via Slack and emails via Gmail on a schedule. When an owner replies — "done", "pushing to next week", "I'm blocked on X" — Verato reads the reply once daily at 08:00 UTC, parses the intent with Gemini AI, and updates the commitment status automatically. If the reply is ambiguous, the CoS receives a notification with the full reply text and can decide what to do.
@@ -91,18 +99,21 @@ The bell icon in the top nav shows your personal notification feed:
 
 Please test and give feedback on:
 
-1. **Extraction quality** — Did Verato find all the real commitments? Did it miss any? Did it pick up anything that wasn't a commitment?
-2. **Owner matching** — Did it correctly identify who owns each commitment?
-3. **Deadline resolution** — If someone said "by end of Thursday" did it resolve to the right date?
-4. **Auto-ingestion** — If your calendar is connected, does the meeting appear and process within 15 minutes of it ending?
-5. **Reply parsing** — Reply to a Slack nudge DM or email nudge with "done" or "need another week" — does Verato pick it up correctly the next morning?
-6. **Slack buttons** — Tap Done or Need More Time on a Slack nudge — does the commitment update immediately?
-7. **Commitment actions** — Confirm, escalate, resolve, reopen — do they feel right?
-8. **Nudge flow** — Does the Slack DM arrive? Does the email send from your Gmail?
-9. **Risk score breakdown** — Does the breakdown (deadline / owner track record / recency) match your intuition about why a commitment is at risk?
-10. **Strategic Initiatives** — Does grouping commitments by initiative help you see the health of a theme at a glance?
-11. **Auto-tag** — Does Gemini's tag suggestion match what you would have chosen manually?
-12. **Notifications** — Do in-app notifications appear at the right times for the right people?
+1. **Onboarding flow** — Does the two-step setup (Slack → Import) feel intuitive for a new user? Is anything confusing or missing?
+2. **Extraction quality** — Did Verato find all the real commitments? Did it miss any? Did it pick up anything that wasn't a commitment?
+3. **Owner matching** — Did it correctly identify who owns each commitment?
+4. **Deadline resolution** — If someone said "by end of Thursday" did it resolve to the right date?
+5. **Auto-ingestion** — If your calendar is connected, does the meeting appear and process within 15 minutes of it ending?
+6. **Tracker import** — Upload a spreadsheet of existing commitments — does Verato extract them accurately?
+7. **Reply parsing** — Reply to a Slack nudge DM or email nudge with "done" or "need another week" — does Verato pick it up correctly the next morning?
+8. **Slack buttons** — Tap Done or Need More Time on a Slack nudge — does the commitment update immediately?
+9. **Commitment actions** — Confirm, escalate, resolve, reopen — do they feel right?
+10. **Log Manual Update** — Log a verbal update you received outside the system — does the history capture it clearly?
+11. **Nudge flow** — Does the Slack DM arrive? Does the email send from your Gmail?
+12. **Risk score breakdown** — Does the breakdown (deadline / owner track record / recency) match your intuition about why a commitment is at risk?
+13. **Strategic Initiatives** — Does grouping commitments by initiative help you see the health of a theme at a glance?
+14. **Auto-tag** — Does Gemini's tag suggestion match what you would have chosen manually?
+15. **Notifications** — Do in-app notifications appear at the right times for the right people?
 
 ---
 
