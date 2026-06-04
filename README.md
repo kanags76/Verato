@@ -3,7 +3,8 @@
 Accountability layer for organisations. Extracts every commitment made in meetings, assigns it an owner, scores risk, and nudges before it slips.
 
 **Stack:** Django REST API · React/Vite · PostgreSQL · Redis · Celery · Gemini AI · Slack · Gmail OAuth · Google Calendar · Google Meet · Zoom
-**Repo:** https://github.com/kanags76/Verato (private)
+**Licence:** AGPL-3.0
+**Repo:** https://github.com/kanags76/Verato
 **Production:** https://api.verato.twocents.ai (backend) · https://verato.twocents.ai (frontend)
 
 ---
@@ -42,7 +43,8 @@ Verato/
 │   └── .env                   (gitignored — never commit)
 ├── frontend/                  React 19 + Vite + TypeScript + Tailwind v4
 │   ├── src/
-│   │   ├── screens/           Dashboard, CommitmentDetail, Meetings, MeetingDetail, People, Settings, Login, Register, ActivateAccount
+│   │   ├── screens/           Dashboard, CommitmentDetail, Meetings, MeetingDetail, People, Settings, Initiatives, InitiativeDetail, Login, Register, ActivateAccount
+│   │   │   └── onboarding/    ConnectSlack, ImportTracker
 │   │   ├── components/        UploadModal, ClarificationModal, LinkSlackPeopleModal, DelegationManagement, ErrorProvider, layout/, ui/
 │   │   ├── contexts/          AuthContext (JWT + silent refresh)
 │   │   └── lib/
@@ -310,6 +312,16 @@ PHASE 3A — Auth, Legal & Team Mgmt    ✓ COMPLETE (email verify, password res
 PHASE 3B — Strategic Intelligence     ✓ COMPLETE (initiatives, tag management, auto-tag, AI call logging, risk breakdown)
 PHASE 3C — Transcript Sources         ← Next (tl;dv, Granola, Fathom, Teams)
 ```
+
+---
+
+## Contributing
+
+This project is open source under the AGPL-3.0 licence. Contributions are welcome.
+
+- `main` is a protected branch — all changes must come in via a pull request
+- Fork the repo, create a feature branch, and open a PR against `main`
+- Keep PRs focused — one feature or fix per PR
 
 ---
 
