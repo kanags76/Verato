@@ -80,4 +80,3 @@ If this resonates, we would love to show you the product and talk about what a d
 ---
 
 *Verato — Private Beta*
-*Contact: kanags@gmail.com*

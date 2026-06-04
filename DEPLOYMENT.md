@@ -44,8 +44,8 @@ mkdir -p ~/.ssh
 aws ec2 create-key-pair \
   --key-name verato-ec2 \
   --query 'KeyMaterial' \
-  --output text > ~/.ssh/verato-ec2.pem
-chmod 400 ~/.ssh/verato-ec2.pem
+  --output text > ~/.ssh/your-key.pem
+chmod 400 ~/.ssh/your-key.pem
 
 # Create security group
 SG_ID=$(aws ec2 create-security-group \
@@ -98,7 +98,7 @@ aws ec2 describe-addresses \
   --output text
 ```
 
-Current Elastic IP: `98.87.229.254`
+Current Elastic IP: `YOUR_EC2_IP`
 
 ---
 
@@ -110,7 +110,7 @@ aws route53 list-hosted-zones --query 'HostedZones[*].[Name,Id]' --output table
 
 # Create A record
 aws route53 change-resource-record-sets \
-  --hosted-zone-id Z03649572M2VN6BBFBEDC \
+  --hosted-zone-id YOUR_ZONE_ID \
   --change-batch '{
     "Changes": [{
       "Action": "CREATE",
@@ -118,7 +118,7 @@ aws route53 change-resource-record-sets \
         "Name": "api.verato.twocents.ai",
         "Type": "A",
         "TTL": 300,
-        "ResourceRecords": [{"Value": "98.87.229.254"}]
+        "ResourceRecords": [{"Value": "YOUR_EC2_IP"}]
       }
     }]
   }'
@@ -133,14 +133,14 @@ dig +short api.verato.twocents.ai
 
 ```bash
 # Copy setup scripts to server
-scp -i ~/.ssh/verato-ec2.pem \
+scp -i ~/.ssh/your-key.pem \
   scripts/setup-ec2.sh \
   scripts/first-run.sh \
   scripts/deploy.sh \
   ubuntu@api.verato.twocents.ai:~/
 
 # SSH in
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@api.verato.twocents.ai
+ssh -i ~/.ssh/your-key.pem ubuntu@api.verato.twocents.ai
 
 # On the server — install Docker
 sudo bash ~/setup-ec2.sh
@@ -161,7 +161,7 @@ cat ~/.ssh/github_deploy.pub
 Add the public key to the repo (run locally):
 
 ```bash
-gh repo deploy-key add - --repo kanags76/Verato --title "verato-ec2" <<< "<paste public key here>"
+gh repo deploy-key add - --repo your-github-username/your-repo --title "verato-ec2" <<< "<paste public key here>"
 ```
 
 Clone the repo on the server:
@@ -170,7 +170,7 @@ Clone the repo on the server:
 # On the EC2 server
 echo -e "Host github.com\n  IdentityFile ~/.ssh/github_deploy\n  StrictHostKeyChecking no" >> ~/.ssh/config
 
-git clone git@github.com:kanags76/Verato.git /tmp/verato
+git clone git@github.com:your-github-username/your-repo.git /tmp/verato
 sudo mv /tmp/verato /opt/verato
 sudo chown -R ubuntu:ubuntu /opt/verato
 ```
@@ -188,7 +188,7 @@ cp .env.production.template .env.production
 Or `scp` a pre-filled file from your Mac:
 
 ```bash
-scp -i ~/.ssh/verato-ec2.pem .env.production ubuntu@api.verato.twocents.ai:/opt/verato/.env.production
+scp -i ~/.ssh/your-key.pem .env.production ubuntu@api.verato.twocents.ai:/opt/verato/.env.production
 ```
 
 Key variables to fill in:
@@ -247,7 +247,7 @@ cd /opt/verato && bash scripts/deploy.sh
 Or SSH in and run it:
 
 ```bash
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@api.verato.twocents.ai "cd /opt/verato && bash scripts/deploy.sh"
+ssh -i ~/.ssh/your-key.pem ubuntu@api.verato.twocents.ai "cd /opt/verato && bash scripts/deploy.sh"
 ```
 
 > **Important:** `deploy.sh` always runs `docker compose up -d --build`, which rebuilds the image from the latest code.  
@@ -265,12 +265,12 @@ The deploy script runs three steps automatically:
 
 | Resource | ID / Value |
 |---|---|
-| EC2 Instance | `i-0d5faa6d9de340172` |
+| EC2 Instance | `YOUR_INSTANCE_ID` |
 | Instance type | `t3.small` (us-east-1) |
-| Elastic IP | `98.87.229.254` |
-| Security Group | `sg-01473198408b4a457` |
-| SSH Key | `~/.ssh/verato-ec2.pem` |
-| Route 53 Zone | `Z03649572M2VN6BBFBEDC` (twocents.ai) |
+| Elastic IP | `YOUR_EC2_IP` |
+| Security Group | `YOUR_SG_ID` |
+| SSH Key | `~/.ssh/your-key.pem` |
+| Route 53 Zone | `YOUR_ZONE_ID` (twocents.ai) |
 | DNS | `api.verato.twocents.ai` |
 
 ---
@@ -291,15 +291,15 @@ Falls back to Vertex AI ADC for local development.
 
 | Item | Value |
 |------|-------|
-| EC2 IP | `98.87.229.254` |
+| EC2 IP | `YOUR_EC2_IP` |
 | SSH user | `ubuntu` |
-| SSH key | `~/.ssh/verato-ec2.pem` |
+| SSH key | `~/.ssh/your-key.pem` |
 | App path | `/opt/verato` |
 | API | `https://api.verato.twocents.ai` |
 | Frontend | `https://ais-dev-ecrwhyp7mx4gyc7gxgjoek-18239168023.asia-east1.run.app` |
 
 ```bash
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254
+ssh -i ~/.ssh/your-key.pem ubuntu@YOUR_EC2_IP
 ```
 
 ---
@@ -335,7 +335,7 @@ Code is **baked into the Docker image** — not volume-mounted. Always rebuild a
 git push origin main
 
 # On EC2
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254
+ssh -i ~/.ssh/your-key.pem ubuntu@YOUR_EC2_IP
 cd /opt/verato
 git pull origin main
 docker compose --env-file .env.production -f docker-compose.prod.yml build web celery celery-beat
@@ -345,13 +345,13 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec web py
 
 Or from local in one command (after pushing):
 ```bash
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && bash scripts/deploy.sh"
+ssh -i ~/.ssh/your-key.pem ubuntu@YOUR_EC2_IP "cd /opt/verato && bash scripts/deploy.sh"
 ```
 
 **Env-only changes** (no code change) — no rebuild needed, just scp + restart:
 ```bash
-scp -i ~/.ssh/verato-ec2.pem .env.production ubuntu@98.87.229.254:/opt/verato/.env.production
-ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker compose --env-file .env.production -f docker-compose.prod.yml restart web celery celery-beat"
+scp -i ~/.ssh/your-key.pem .env.production ubuntu@YOUR_EC2_IP:/opt/verato/.env.production
+ssh -i ~/.ssh/your-key.pem ubuntu@YOUR_EC2_IP "cd /opt/verato && docker compose --env-file .env.production -f docker-compose.prod.yml restart web celery celery-beat"
 ```
 
 ---
@@ -375,7 +375,7 @@ ssh -i ~/.ssh/verato-ec2.pem ubuntu@98.87.229.254 "cd /opt/verato && docker comp
 |----------|-------|
 | `SLACK_BOT_TOKEN` | `xoxb-...` — get from Slack app → OAuth & Permissions. **Currently blank — DMs won't fire without this.** |
 | `SLACK_SIGNING_SECRET` | Slack app → Basic Information |
-| `SLACK_CLIENT_ID` | `8245684161444.11177749142678` |
+| `SLACK_CLIENT_ID` | `YOUR_SLACK_CLIENT_ID` |
 | `SLACK_CLIENT_SECRET` | Slack app → Basic Information |
 | `SLACK_OAUTH_REDIRECT_URI` | `https://api.verato.twocents.ai/api/v1/slack/oauth/callback/` |
 
