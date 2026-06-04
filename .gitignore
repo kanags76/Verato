@@ -29,3 +29,6 @@ mediafiles/
 # IDE
 .vscode/
 .idea/
+
+# Local only
+Not for Github/
